@@ -1,0 +1,11 @@
+**/__pycache__/
+/__pycache__/
+
+.ipynb_checkpoints
+**/.ipynb_checkpoints/
+
+
+## Large size files
+HLPT_1loop_calculation.npy
+HLPT_1loop_calculation_linear-scale.npy
+HLPT_linear_calculation.npy
