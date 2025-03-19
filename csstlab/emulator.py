@@ -54,12 +54,12 @@ class Emulator(BaseEmulator_GP):
                     "\n  The theoretical 1-loop power spectrum may not included in the `./data` folder due to large size. "
                   + "\n  You may generate them and then remake the emulator. \n" )
         paramsNorm = self.NormalizeParam(self.ext_Params)
-        #self.EmuLoop._train_emulator( paramsNorm, self.k, self.ext_Pkij_T, 
-        #                            to_save=True, filename=self.__FileLoop, )
-        self.EmuLoop._load_emulator( self.__FileLoop )   ## TEST
-        #self.EmuLin ._train_emulator( paramsNorm, self.klin, self.Pkij_lin, 
-        #                             to_save=True, filename=self.__FileLin, )
-        self.EmuLin ._load_emulator( self.__FileLin  )   ## TEST
+        self.EmuLoop._train_emulator( paramsNorm, self.k, self.ext_Pkij_T, 
+                                    to_save=True, filename=self.__FileLoop, )
+        #self.EmuLoop._load_emulator( self.__FileLoop )   ## TEST
+        self.EmuLin ._train_emulator( paramsNorm, self.klin, self.Pkij_lin, 
+                                     to_save=True, filename=self.__FileLin, )
+        ##self.EmuLin ._load_emulator( self.__FileLin  )   ## TEST
 
         paramsNorm = self.NormalizeParam(self.Parameters)
         paramsNorm_and_z = self.To_Abscissas_MultiCosmo(paramsNorm)
