@@ -35,7 +35,8 @@ class HaloPowerSpec:
             PathParam = "/Users/zhoushuren/_Projects/_24_HLPT/Data//EmulatorDataSet/AllParameters.npy"
         HaloPower = np.load( PathHalo , allow_pickle=True, )[()]
         self.Cosmo0, self.Cosmo1 = 83, 129
-        ListCosmo = [0] + [i for i in range(self.Cosmo0, self.Cosmo1)]
+        self.Cosmo0 -= 1    ## begin from index 1
+        self.Cosmo1 -= 1
         AllParams = np.load( PathParam, allow_pickle=True)[()]["Param"]
 
         L = 1000
@@ -47,7 +48,6 @@ class HaloPowerSpec:
         
         self.HaloPower = HaloPower
         self.__params = AllParams
-        ##self.fpm_cov = FastPM_Covariance()
         self.V = L**3
         self.k = k
         self.kedges = kedges
@@ -57,19 +57,23 @@ class HaloPowerSpec:
     
     def set_kmax(self, IndexK):
         self.IndexK = IndexK
-        ##self.fpm_cov.set_k( self.k[:IndexK] )
         self.Nk_set = self.Nk_cells[:IndexK]
         return self.k[:IndexK]
     
-    def get_params(self, icosmo):
+    def __cosmoTag(self, icosmo):
         if icosmo > 0 : tag = "c%04d"%(icosmo+self.Cosmo0)
         else          : tag = "c0000"
-        return self.__params[tag]
+        return tag
+    
+    
+    def get_params(self, icosmo):
+        if icosmo > 0 :
+            return self.__params[ icosmo+self.Cosmo0 ]
+        return self.__params[0]
     
     
     def Nhalo(self, icosmo, IndexZ=None, IndexMass=None):
-        if icosmo > 0 : tag = "c%04d"%(icosmo+self.Cosmo0)
-        else          : tag = "c0000"
+        tag = self.__cosmoTag(icosmo)
         nhalo = self.HaloPower[tag]["Nhalo"]
         if IndexZ is None : return nhalo
         nhalo = nhalo[IndexZ]
@@ -79,8 +83,7 @@ class HaloPowerSpec:
     
     def __call__(self, icosmo, z, mass, ):
         HaloPower = self.HaloPower
-        if icosmo > 0 : tag = "c%04d"%(icosmo+self.Cosmo0)
-        else          : tag = "c0000"
+        tag = self.__cosmoTag(icosmo)
         kmax = self.IndexK
         karr = self.k[:kmax]
         
@@ -111,7 +114,7 @@ class LossFunction:
 
         vals, vecs = np.linalg.eigh(_Cov_hhhm)
         vals_inv = 1/vals
-        vals_inv[ vals < vals.max()*1e-15 ] = 0
+        vals_inv[ vals < vals.max()*1e-15 ] = 0      ## also remove negative eigenvalues
         cov_inv = vecs @ np.diag(vals_inv) @ vecs.T 
         self._Cov_inv = cov_inv
         #self._Cov_inv = np.linalg.pinv(_Cov_hhhm, rcond=1e-5 )
@@ -175,7 +178,7 @@ class LossFunction:
 
 def SolveEquation( _lossfunc, Nparams=5, Ntry=2):
     '''
-    Multi-method and multi-try to find the global maximum
+    Multi-method and multi-try to find the global solution
     '''
     funcval = 1e10
     sol = None
