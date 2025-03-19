@@ -1,7 +1,8 @@
-## CSSTLaB : <u>C</u>hina <u>S</u>pace <u>S</u>tation <u>T</u>elescope Hybrid <u>La</u>grangian <u>B</u>ias Expansion Emulator
+## CSSTLaB : <ins>C</ins>hina <ins>S</ins>pace <ins>S</ins>tation <ins>T</ins>elescope Hybrid <ins>La</ins>grangian <ins>B</ins>ias Expansion Emulator
 
 
-This is the extension of CSST emulator series.
+A python package for modeling the biased tracer in real space within the hybrid Lagrangian bias expansion framework, as one of the extensions of [CSST emulator](https://github.com/czymh/csstemu) series.
 
 ```python
 ```
+

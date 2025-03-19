@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.signal import savgol_filter
-from .GaussianProcess import GaussianProcessRegressor, ConstantKernel, RBF
 from .base import *
+from .GaussianProcess import GaussianProcessRegressor, ConstantKernel, RBF
 
 
 
@@ -16,7 +16,6 @@ class Emulator_simu(BaseEmulator_GP):
         self.RescaleFunc = self._empty_list
         self.__kmax = kmax
         self.Nz = 12
-
     
 
     def __set_rescaleDamping(self, k):
@@ -82,15 +81,15 @@ class Emulator_simu(BaseEmulator_GP):
         '''
         [ fine tunning parameters based on LOO test ]
         '''
-        k_cut = 1    # the index of first k-bin, to avoid large fluctuation
-        k_max = 0.8  # the maximum k range, to avoid the unstable small scale of `pk_T`
+        k_cut = 1     ## the index of first k-bin, to avoid large fluctuation
+        k_max = 0.8   ## the maximum k range, to avoid the unstable small scale of `pk_T`
         kdrop1 = 5    # 
         kdrop2 = 11
         List_kcut_H1 = [ (0, 2), (1, 2), (0, 3), 
-                         (0, 4), (1, 4),  (4, 4), ]    # for these basis, the smoothing seems biased for first few k-bins
+                         (0, 4), (1, 4),  (4, 4), ]    ## for these basis, the smoothing seems biased for first few k-bins
         List_kcut_H2 = [ (3, 1) ]
-        List_NotSmooth = [ (0, 0), (0, 1), (1, 1),   # NOT smoothing beacuse of the BAO wiggles
-                           (3, 2), (4, 2), ]  # do NOT smooth these basis spectra with crossing-zero
+        List_NotSmooth = [ # (0, 0), (0, 1), (1, 1),   ## NOT smoothing beacuse of the BAO wiggles
+                           (3, 2), (4, 2), ]     ## do NOT smooth these basis spectra with crossing-zero
         List_kcut_H1   = List_kcut_H1   + [ (j, i) for (i, j) in List_kcut_H1 ]
         List_kcut_H2   = List_kcut_H2   + [ (j, i) for (i, j) in List_kcut_H2 ]
         List_NotSmooth = List_NotSmooth + [ (j, i) for (i, j) in List_NotSmooth ]

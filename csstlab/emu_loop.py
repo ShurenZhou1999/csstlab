@@ -1,5 +1,5 @@
 import numpy as np
-from .base import *
+from .base import BaseEmulator_GP
 from .GaussianProcess import DotProduct, Matern, \
                             ConstantKernel, RBF
 
@@ -47,7 +47,9 @@ class Emulator_loop(BaseEmulator_GP):
                 "Params" : Params, 
                 "Rij" : Rij,
                 "PijMean" : PijMean,
-                "Aij" : Aij, 
+                "Aij" : None , # Aij, 
+                "N_training_samples" : Aij.shape[-1],
+                ## we have saved the Aij in the GP-model, thus we do not need to save the training samples again.
             })
             self._save_GPs( filename )
     
@@ -56,7 +58,7 @@ class Emulator_loop(BaseEmulator_GP):
         Dload = self.load(filename)
         k, Params = Dload["k"], Dload["Params"] 
         self.k, self.Nk = k, k.shape[0]
-        self.N_training_samples = Dload["Aij"].shape[-1]
+        self.N_training_samples = Dload["N_training_samples"]
         
         self.PCA_T = Pk_loop_PCA( k, None, kmax=self.__kmax , N_PCs=self.__N_PCs, )
         self.PCA_T.set_PCs( Dload["Rij"], Dload["PijMean"], None )

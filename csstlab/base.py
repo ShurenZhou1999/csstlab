@@ -181,66 +181,71 @@ class BaseEmulator_GP(ABC):
         ]).T
     
 
-    # -------------------------------------------------------------------------------------------------
-    # -------------------------------------------------------------------------------------------------
+# -------------------------------------------------------------------------------------------------
+# -------------------------------------------------------------------------------------------------
 
 
 
 
 
-def Combine_TheoreticalTempate_shape66( Pk_cleft, Pk_kecl, ):
-    '''
-    We make use of the theoretical templates from `CLEFT` and `KECLEAN`. 
-    The choices of which templates to be used for the specific `P_{ij}` are given by test. 
+class Selection_TheoreticalTemplate:
+    def __init__(self):
+        pass
 
-    Parameters
-    ----------
-    Pk_cleft, Pk_kecl : Ndarray, shape (... , 6, 6, Nk) 
-    ----------
-    '''
-    if Pk_cleft.shape[-2] != 6  or Pk_kecl.shape[-2] != 6  \
-    or Pk_cleft.shape[-3] != 6  or Pk_kecl.shape[-3] != 6  :
-        raise ValueError("The shape of `Pk_cleft` and `Pk_kecl` should be (*, 6, 6, Nk). ")
-    pk_out = Pk_cleft.copy()
-    for i, j in [
-        [2, 2], 
-        [3, 2], 
-        [4, 2], [4, 3], [4, 4],  
-        [5, 3], [5, 4], [5, 5], 
-    ]:
-        pk_out[..., i, j, :] = Pk_kecl[..., i, j, :]
-        pk_out[..., j, i, :] = pk_out [..., i, j, :]
-    return pk_out
+    @staticmethod
+    def Combine_TheoreticalTempate_shape66( Pk_cleft, Pk_kecl, ):
+        '''
+        We make use of the theoretical templates from `CLEFT` and `KECLEAN`. 
+        The choices of which templates to be used for the specific `P_{ij}` are given by test. 
+
+        Parameters
+        ----------
+        Pk_cleft, Pk_kecl : Ndarray, shape (... , 6, 6, Nk) 
+        ----------
+        '''
+        if Pk_cleft.shape[-2] != 6  or Pk_kecl.shape[-2] != 6  \
+        or Pk_cleft.shape[-3] != 6  or Pk_kecl.shape[-3] != 6  :
+            raise ValueError("The shape of `Pk_cleft` and `Pk_kecl` should be (*, 6, 6, Nk). ")
+        pk_out = Pk_cleft.copy()
+        for i, j in [
+            [2, 2], 
+            [3, 2], 
+            [4, 2], [4, 3], [4, 4],  
+            [5, 3], [5, 4], [5, 5], 
+        ]:
+            pk_out[..., i, j, :] = Pk_kecl[..., i, j, :]
+            pk_out[..., j, i, :] = pk_out [..., i, j, :]
+        return pk_out
 
 
+    @staticmethod
+    def Combine_TheoreticalTempate_shape21( Pk_cleft, Pk_kecl, ):
+        '''
+        We make use of the theoretical templates from `CLEFT` and `KECLEAN`. 
+        The choices of which templates to be used for the specific `P_{ij}` are given by test. 
 
-def Combine_TheoreticalTempate_shape21( Pk_cleft, Pk_kecl, ):
-    '''
-    We make use of the theoretical templates from `CLEFT` and `KECLEAN`. 
-    The choices of which templates to be used for the specific `P_{ij}` are given by test. 
-
-    Parameters
-    ----------
-    Pk_cleft, Pk_kecl : Ndarray, shape (... , 21, Nk) 
-    ----------
-    '''
-    if Pk_cleft.shape[-2] != 21  or Pk_kecl.shape[-2] != 21  :
-        raise ValueError("The shape of `Pk_cleft` and `Pk_kecl` should be (*, 21 Nk). ")
-    IndexUsingCL = [
-        (2, 2), 
-        (3, 2), 
-        (4, 2), (4, 3), (4, 4),  
-        (5, 3), (5, 4), (5, 5), 
-    ]
-    pk_out = Pk_cleft.copy()
-    icount = -1
-    for i in range(6):
-        for j in range(i, 6):
-            icount += 1
-            if (i, j) in IndexUsingCL or (j, i) in IndexUsingCL:
-                pk_out[:, :, icount, :] = Pk_cleft[:, :, icount, :]
-    return pk_out
-    
+        Parameters
+        ----------
+        Pk_cleft, Pk_kecl : Ndarray, shape (... , 21, Nk) 
+        ----------
+        '''
+        if Pk_cleft.shape[-2] != 21  or Pk_kecl.shape[-2] != 21  :
+            raise ValueError("The shape of `Pk_cleft` and `Pk_kecl` should be (*, 21 Nk). ")
+        IndexUsingCL = [
+            (2, 2), 
+            (3, 2), 
+            (4, 2), (4, 3), (4, 4),  
+            (5, 3), (5, 4), (5, 5), 
+        ]
+        pk_out = Pk_cleft.copy()
+        icount = -1
+        for i in range(6):
+            for j in range(i, 6):
+                icount += 1
+                if (i, j) in IndexUsingCL or (j, i) in IndexUsingCL:
+                    pk_out[:, :, icount, :] = Pk_cleft[:, :, icount, :]
+        return pk_out
+        
 
 # -------------------------------------------------------------------------------------------------
 # -------------------------------------------------------------------------------------------------

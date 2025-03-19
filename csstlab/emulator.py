@@ -21,7 +21,7 @@ class Emulator(BaseEmulator_GP):
         self.__FileLin  = self.__PathData + "GP_lin.npy"
         self.__kmax = 1.05
         self.__Nz = 12
-        self.Nloop_samples = 14000       ## fine-tunning parameters, the number of samples to train the theory emulator
+        self.Nloop_samples = 14000       ## The number of samples to train the theory emulator; the parameters like PC numbers are fine-tuned to this sample size.
         self.EmuSimu = Emulator_simu(kmax=self.__kmax)
         self.EmuLoop = Emulator_loop(kmax=self.__kmax)
         self.EmuLin  = Emulator_loop(kmax=self.__kmax, N_PCs=12, )   # linear scale of 1-loop power spectrum
@@ -43,21 +43,27 @@ class Emulator(BaseEmulator_GP):
         self.z = self.redshifts      # `z` and `redshifts` refer to the same array
         self.k = self.EmuSimu.k      # `k` bin measured from the simulation
         self.Nk = self.k.shape[0]
-        self.klin = self.EmuLin.k    # `k` in linear scale, replaced by 1-loop Pk
+        self.klin = self.EmuLin.k    # `k`-bin of linear scale, where the samples are replaced by 1-loop Pk
     
 
     def _train_emulator(self, ):
         print("Emulator message :: Training begins. Several minutes are required.")  ## 
-        self.__load_raw_results( )
+        try: self.__load_raw_results( )
+        except FileNotFoundError:
+            raise FileNotFoundError(
+                    "\n  The theoretical 1-loop power spectrum may not included in the `./data` folder due to large size. "
+                  + "\n  You may generate them and then remake the emulator. \n" )
         paramsNorm = self.NormalizeParam(self.ext_Params)
-        self.EmuLoop._train_emulator( paramsNorm, self.k, self.ext_Pkij_T, 
-                                    to_save=True, filename=self.__FileLoop, )
-        self.EmuLin ._train_emulator( paramsNorm, self.klin, self.Pkij_lin, 
-                                     to_save=True, filename=self.__FileLin, )
+        #self.EmuLoop._train_emulator( paramsNorm, self.k, self.ext_Pkij_T, 
+        #                            to_save=True, filename=self.__FileLoop, )
+        self.EmuLoop._load_emulator( self.__FileLoop )   ## TEST
+        #self.EmuLin ._train_emulator( paramsNorm, self.klin, self.Pkij_lin, 
+        #                             to_save=True, filename=self.__FileLin, )
+        self.EmuLin ._load_emulator( self.__FileLin  )   ## TEST
 
         paramsNorm = self.NormalizeParam(self.Parameters)
         paramsNorm_and_z = self.To_Abscissas_MultiCosmo(paramsNorm)
-        ## Instead of use accurate theoretical results, we use the output of trained theory-emulator as templates to eliminate the model bias. 
+        ## Instead of use accurate theoretical results, we use the output of trained theory-emulator as templates to eliminate the model inaccuracy. 
         pk_T = np.array([ self.EmuLoop( iparam ) for iparam in paramsNorm ])   #self.Pkij_T
         pk_D = self.Pkij[..., self.k<self.__kmax ]
         karr = self.k[self.k<self.__kmax]
@@ -81,7 +87,7 @@ class Emulator(BaseEmulator_GP):
         self.Parameters = Dload["Parameters"]
         self.redshifts = Dload["redshifts"]   # attention the redshift is ordered by  z=3 -> z=0 
         self.Pkij = Dload["Pkij"]
-        self.Pkij_T = Dload["Pkij_T"]
+        self.Pkij_T = None   ## Dload["Pkij_T"]
         self.k = Dload["k"]
         self.raw_kedges = Dload["kedges"]
 
@@ -109,7 +115,7 @@ class Emulator(BaseEmulator_GP):
         else:
             self.__Mask_k = np.ones(( 21, len(z_array), len(k_array), ), dtype='int32', )
         for (l, kmax) in [
-            ( 5, 1.0), # (0, 5),   The theory and simulation result are inconsistent in all region. 
+            ( 5, 0.35), # (0, 5),   The theory and simulation result are inconsistent in all region. 
             (10, 0.2), # (1, 5), 
             (18, 0.0015), # (4, 4), 
         ]:
@@ -131,16 +137,13 @@ class Emulator(BaseEmulator_GP):
             self.__intp_kdrop[i][j] = 1
             self.__k_stack[i][j] = k_stack
         
-        #for (i, j) in [ (0, 5), (1, 5), ]: \
-        i, j = (0, 5)
-        self.__intp_kdrop[i][j] = 29  ;\
-        self.__k_stack[i][j] = np.hstack([ self.klin, self.k[29:], ])
-        i, j = (1, 5)
-        self.__intp_kdrop[i][j] = 20  ;\
-        self.__k_stack[i][j] = np.hstack([ self.klin, self.k[20:], ])
-        i, j = (4, 5)
-        self.__intp_kdrop[i][j] = 32
-        self.__k_stack[i][j] = np.hstack([ self.klin, self.k[32:], ])
+        for (i, j, kInd) in [ 
+            (0, 5, 20), 
+            (1, 5, 20), 
+            (4, 5, 32), 
+        ]: 
+            self.__intp_kdrop[i][j] = kInd 
+            self.__k_stack[i][j] = np.hstack([ self.klin, self.k[kInd:], ])
 
 
 
@@ -199,19 +202,17 @@ class Emulator(BaseEmulator_GP):
         ----------
         Param : 1D array with shape (8)
 
-        if k and z are set, return the list of P_ij that each component with shape (Nz, Nk)
-        else, return the list of P_ij with shape (default-Nz, 6, 6, default-Nk)
+        If k and z are set, return P_ij array, with shape (21, Nz, Nk), where 21 is the number of P_ij components.
+        Otherwise, the Nz and Nk is the default value in training the emulator.
         '''
         ParamNorm = self.NormalizeParam(Param)
+        if np.any( np.abs(ParamNorm) > 1):
+            warnings.warn("The input Cosmological parameters are out of the range of the emulator. ")
         ParamNorm_and_z = self.To_Abscissas(ParamNorm)
         pk_T = self.EmuLoop( ParamNorm, )
         pk_D = self.EmuSimu( ParamNorm_and_z, pk_T, ) 
         
         if self.__has_set_k_and_z :
-            '''
-            For those power spectrums well described by 1-loop theory in large scale, we use the theoretical results in k < 0.01 h/Mpc.
-            Otherwise, we extropolate the results directly.
-            '''
             pk_lin = self.EmuLin( ParamNorm, )
             pks_out = [ ]
             for l, (i, j) in enumerate(self._index):
@@ -230,6 +231,11 @@ class Emulator(BaseEmulator_GP):
         else:
             pk_D = [ pk_D[:, i, j] for (i, j) in self._index ]
             return pk_D *self.__Mask_k
+    
+
+    @property
+    def EFTofLSS_Model(self,):
+        return EFTofLSS_Model
 
 
 
@@ -244,6 +250,10 @@ class EFTofLSS_Model:
 
     @staticmethod
     def Pkij_to_biasPk( pks, b_1, b_2, b_s2, b_n2, b_3=None, ):
+        '''
+        combine the Lagrangian basis power spectrum to the biased tracer power spectrum
+        not include the shot noise term in the auto-power spectrum
+        '''
         P_cross = pks[0] + b_1 *pks[1] + b_2 *pks[2] + b_s2 *pks[3] + b_n2 *pks[4]
         P_auto =    ( pks[0] + 2*b_1 *pks[1] + 2*b_2 *pks[2] + 2*b_s2 *pks[3] + 2*b_n2 *pks[4] ) + \
                 b_1*(            b_1 *pks[6] + 2*b_2 *pks[7] + 2*b_s2 *pks[8] + 2*b_n2 *pks[9] ) + \
@@ -252,11 +262,16 @@ class EFTofLSS_Model:
                 b_n2*(                                                            b_n2 *pks[18]) 
         if b_3 is not None:
             P_cross += b_3 * pks[5] 
-            P_auto  += b_3 *( 2*pks[5] + 2*b_1 *pks[10] + 2*b_2 *pks[14] + 2*b_s2 *pks[17] + 2*b_n2 *pks[19] + b_3 *pks[20] )
+            P_auto  += 2* b_3 *( pks[5] + b_1 *pks[10] + b_2 *pks[14] + b_s2 *pks[17] + b_n2 *pks[19] ) \
+                        + b_3*b_3 *pks[20]
         return P_auto, P_cross
     
+
     @staticmethod
     def Pkij_to_biasPk_gradient( pks, b_1, b_2, b_s2, b_n2, b_3=None, ):
+        '''
+        Gradient of the biased tracer power spectrum with respect to the bias parameters
+        '''
         gridP_cross = [ pks[1], pks[2], pks[3], pks[4], ]
         gridP_auto = [ 
             2* (pks[1] + b_1 *pks[6] + b_2 *pks[7] + b_s2 *pks[8] + b_n2 *pks[9] ) , 
