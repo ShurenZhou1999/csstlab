@@ -62,7 +62,10 @@ class HaloPowerSpec:
         return self.k[:IndexK]
     
     def get_params(self, icosmo):
-        return self.__params[icosmo+self.Cosmo0]
+        if icosmo > 0 : tag = "c%04d"%(icosmo+self.Cosmo0)
+        else          : tag = "c0000"
+        return self.__params[tag]
+    
     
     def Nhalo(self, icosmo, IndexZ=None, IndexMass=None):
         if icosmo > 0 : tag = "c%04d"%(icosmo+self.Cosmo0)
