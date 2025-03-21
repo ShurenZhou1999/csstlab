@@ -5,9 +5,9 @@
 
 import os, numpy as np
 from scipy.interpolate import interp1d
-from Utils import QFuncFFT, loginterp
-from Utils import SphericalBesselTransform_fftw as SphericalBesselTransform
-from Math import *
+from .Utils import QFuncFFT, loginterp
+from .Utils import SphericalBesselTransform_fftw as SphericalBesselTransform
+from .Math import *
 
 
 class CLEFT:
@@ -310,9 +310,8 @@ class CLEFT:
         else:              self.jn_final_Zel = l
         
         return 4*suppress*np.pi*ret
-
-
     
+
 
 
     def get_basis_terms(self, kmin = 1e-3, kmax = 5, nk = 200, karr=None ):
@@ -369,3 +368,52 @@ class CLEFT:
             [ None,    None   , None   , None   , x[:, 14],  6*x[:, 19], ], 
             [ None,    None   , None   , None   , None    , 36*x[:, 20], ], 
         ]
+    
+
+
+    ## ---------------------------------------------------------------------------------
+    ## ---------------------------------------------------------------------------------
+
+    
+    def matter_power_sepctrum(self, kmin = 1e-3, kmax = 5, nk = 300, karr=None ):
+        '''
+        1LPT matter power spectrum
+        '''
+        if karr is None: kv = np.logspace(np.log10(kmin), np.log10(kmax), nk)
+        else:            kv = karr
+        nk = len(kv)
+        pk_mm = np.zeros((nk))
+        self.sph_mm = SphericalBesselTransform(self.qint, L=self.jn, ncol=1, threads=self.threads, force_high_ell=False,)
+
+        for foo in range(nk):
+            pk_mm[foo] = self.__matter_power_sepctrum__at_k(kv[foo])
+        return kv, pk_mm
+    
+
+    def __matter_power_sepctrum__at_k(self, k):
+        ksq = k**2
+        EXP_THRESHOLD = 700
+        phase = -0.5*ksq * (self.XYlin - self.sigma)
+        phase[ phase > EXP_THRESHOLD ] = EXP_THRESHOLD
+        expon    = np.exp(phase)
+        suppress = np.exp(-0.5 * ksq *self.sigma)
+        
+        ret = np.zeros(1)
+        bias_integrands = np.zeros((1,self.N))
+        
+        for l in range(self.jn):
+            bias_integrands[0,:] = 1
+
+            # multiply by IR exponent
+            if l == 0:
+                bias_integrands = bias_integrands * expon
+                bias_integrands -= bias_integrands[:,-1][:,None] # note that expon(q = infinity) = 1
+            else:
+                bias_integrands = bias_integrands * expon * self.yq**l
+            
+            # do FFTLog
+            ktemps, bias_ffts = self.sph_mm.sph(l, bias_integrands)
+            if bias_ffts is None: break
+            ret +=  k**l * interp1d(ktemps, bias_ffts)(k)
+        
+        return 4*suppress*np.pi*ret

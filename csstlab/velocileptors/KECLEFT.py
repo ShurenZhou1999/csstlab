@@ -4,9 +4,9 @@
 
 import os, numpy as np
 from scipy.interpolate import interp1d
-from Utils import QFuncFFT, loginterp
-from Utils import SphericalBesselTransform_fftw as SphericalBesselTransform
-from Math import *
+from .Utils import QFuncFFT, loginterp
+from .Utils import SphericalBesselTransform_fftw as SphericalBesselTransform
+from .Math import *
 
 
 

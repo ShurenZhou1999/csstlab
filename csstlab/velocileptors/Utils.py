@@ -503,29 +503,6 @@ class QFuncFFT:
         # then lump together into the kernels and reverse fourier
 
         Qfac = 4 * np.pi 
-        ##_integrand_Q1 = Qfac * (8./15 * self.xi00**2 - 16./21 * self.xi20**2 + 8./35 * self.xi40**2)
-        ##_integrand_Q2 = Qfac * (4./5 * self.xi00**2 - 4./7 * self.xi20**2 - 8./35 * self.xi40**2 \
-        ##                        - 4./5 * self.xi11*self.xi1m1 + 4/5 * self.xi31*self.xi3m1)
-        ##_integrand_Q3 = Qfac * (38./15 * self.xi00**2 + 2./3*self.xi02*self.xi0m2 \
-        ##                        - 32./5*self.xi1m1*self.xi11 + 68./21*self.xi20**2 \
-        ##                        + 4./3 * self.xi22*self.xi2m2 - 8./5 * self.xi31*self.xi3m1 + 8./35*self.xi40**2)
-        ##_integrand_Q5 = Qfac * (2./3 * self.xi00**2 - 2./3*self.xi20**2 \
-        ##                        - 2./5 * self.xi11*self.xi1m1 + 2./5 * self.xi31*self.xi3m1)
-        ##_integrand_Q8 = Qfac * (2./3 * self.xi00**2 - 2./3*self.xi20**2)
-        ##_integrand_Qs2 = Qfac * (-4./15 * self.xi00**2 + 20./21*self.xi20**2 - 24./35*self.xi40**2)
-
-        ##Xk_1 = self.template_QR(0,self.xi00/self.qv)
-        ##Xk_2 = self.template_QR(2,self.xi20/self.qv)
-        ##Xk_3 = self.template_QR(1,self.xi11/self.qv)
-        ##Xk_4 = self.template_QR(3,self.xi31/self.qv)
-        ##self.XPk   = self.p * ( self.k* 2./3.*Xk_1 - self.k* 2./3.*Xk_2 - 2./5.*Xk_3 + 2./5.*Xk_4 )
-        ##Xk_1 = self.template_QR(0,self.xi02/self.qv)
-        ##Xk_2 = self.template_QR(2,self.xi22/self.qv)
-        ##Xk_3 = self.template_QR(1,self.xi13/self.qv)
-        ##Xk_4 = self.template_QR(3,self.xi33/self.qv)
-        ##self.XPk_i2 = self.p * ( self.k* 2./3.*Xk_1 - self.k* 2./3.*Xk_2 - 2./5.*Xk_3 + 2./5.*Xk_4 )
-
-
         ## --------------------------------------------------------------------------
         ## --------------------------------------------------------------------------
         ##
@@ -610,19 +587,8 @@ class QFuncFFT:
     def setup_2pts(self):
         # Piece together xi_l_n into what we need
         
-        ##self.Xlin = 2./3 * (self.xi0m2[0] - self.xi0m2 - self.xi2m2)
-        ##self.Ylin = 2 * self.xi2m2
         self.Xlin = 2./3 * (self.dxi0m2[0] - self.dxi0m2 - self.dxi2m2)
         self.Ylin = 2 * self.dxi2m2
-
-        ##self.Xlin_lt = 2./3 * (self.xi0m2_lt[0] - self.xi0m2_lt - self.xi2m2_lt)
-        ##self.Ylin_lt = 2 * self.xi2m2_lt
-        
-        ##self.Xlin_gt = self.Xlin - self.Xlin_lt
-        ##self.Ylin_gt = self.Ylin - self.Ylin_lt
-        
-        ##self.Xlin_gt = 2./3 * (self.xi0m2_gt[0] - self.xi0m2_gt - self.xi2m2_gt)
-        ##self.Ylin_gt = 2 * self.xi2m2_gt
         
     
     def setup_shear(self):
@@ -634,10 +600,6 @@ class QFuncFFT:
         J3 = -0.2*self.xi1m1 - 0.2*self.xi3m1
         J4 = self.xi3m1
         
-        ##J6 = (7*self.xi00 + 10*self.xi20 + 3*self.xi40)/105.
-        ##J7 = (4*self.xi20 - 3*self.xi40)/21.
-        ##J8 = (-3*self.xi20 - 3*self.xi40)/21.
-        ##J9 = self.xi40
         J6 = (7*self.rxi00 + 10*self.rxi20 + 3*self.rxi40)/105.
         J7 = (4*self.rxi20 - 3*self.rxi40)/21.
         J8 = (-3*self.rxi20 - 3*self.rxi40)/21.
@@ -646,8 +608,6 @@ class QFuncFFT:
         self.V = 4 * J2 * self.rxi20
         self.Xs2 = 4 * J3**2
         self.Ys2 = 6*J2**2 + 8*J2*J3 + 4*J2*J4 + 4*J3**2 + 8*J3*J4 + 2*J4**2
-        ##self.zeta = 2*(4*self.xi00**2/45. + 8*self.xi20**2/63. + 8*self.xi40**2/35)
-        ##self.chi  = 4*self.xi20**2/3.
         self.zeta = 2*(4*self.rxi00**2/45. + 8*self.rxi20**2/63. + 8*self.rxi40**2/35)
         self.chi  = 4*self.rxi20**2/3.
         
@@ -685,9 +645,6 @@ class QFuncFFT:
         
 
         # A10
-        ##self.zerolag_10_loop12 = np.trapz((self.R1-self.R2)/7.,x=self.k) / (2*np.pi**2)
-        ##self.xi0m2_10_loop12 = self.xi_l_n(0,-2, _int=4*self.R2+2*self.Q5)/14.
-        ##self.xi2m2_10_loop12 = self.xi_l_n(2,-2, _int=3*self.R1+4*self.R2+2*self.Q5)/14.
         self.zerolag_10_loop12 = np.trapz((self.xdR1-self.xdR2)/7.,x=self.k) / (2*np.pi**2)
         self.xi0m2_10_loop12 = self.xi_l_n(0,-2, _int= 2*self.xdR2-2*self.xdR1 + 2*self.dxR1+2*self.dxR2 +2*self.Q5 )/14.
         self.xi2m2_10_loop12 = self.xi_l_n(2,-2, _int=   self.xdR1+2*self.xdR2 + 2*self.dxR1+2*self.dxR2 +2*self.Q5 )/14.
@@ -715,26 +672,10 @@ class QFuncFFT:
         self.U11_i2  = self.xi_l_n(1,-1, 3./7 *ksq* (self.xxR1+self.xxR2)) \
                      + self.xi_l_n(1,-1, 3./7*(self.xxR1_i2 +self.xxR2_i2))                ## \delta -> (-k^2)\delta
         self.U11_i4  = self.xi_l_n(1,-1,-6./7 *ksq* (self.xxR1_i2+self.xxR2_i2))     ## both two: \delta -> (-k^2)\delta
-        ##self.U11    = self.xi_l_n(1, 0,-6./7*self.XPk)
-        ##self.U11_i2 = self.xi_l_n(1, 0, 3./7*self.XPk_i2) + self.xi_l_n(1,0,3./7*self.XPk *self.k**2)    
-        ##self.U11_i4 = self.xi_l_n(1, 0,-6./7.*self.XPk_i2 *self.k**2)  
-
-
-        ## --------------------------------------------------------------------------
-        ##self.U11_i2 = self.xi_l_n(1,-1,-6./7*(self.R1_i2+self.R2_i2))
-        ##self.U11_i4 = self.xi_l_n(1,-1,-6./7*(self.R1_i4+self.R2_i4))
-        ## --------------------------------------------------------------------------
 
     
     def setup_third_order(self):
         # All the terms involving the third order bias, which is really just a few
-        '''
-        P3_0 = self.k**2 * self.template_QR(0, 24./5*self.xi00/self.qv)
-        P3_1 = self.k    * self.template_QR(1, -16./5*self.xi11/self.qv)
-        P3_2 = self.k**2 * self.template_QR(2, -20./7*self.xi20/self.qv) + self.template_QR(2,4.*self.xi22/self.qv)
-        P3_3 = self.k    * self.template_QR(3, -24./5*self.xi31/self.qv)
-        P3_4 = self.k**2 * self.template_QR(4, 72./35*self.xi40/self.qv)
-        '''
         P3_0 = self.k**2 * self.template_QR(0, 24./5*self.rxi00/self.qv)
         P3_1 = self.k    * self.template_QR(1, -16./5*self.rxi11/self.qv)
         P3_2 = self.k**2 * self.template_QR(2, -20./7*self.rxi20/self.qv) + self.template_QR(2,4.*self.rxi22/self.qv)
