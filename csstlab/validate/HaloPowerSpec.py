@@ -127,8 +127,21 @@ class LossFunction:
         self.one_zeros[:Nd//2] = 1
 
         self.__alphas = 1
+        self.__has_ksq_shotnoise = False
+        self.__has_ksq_Pmm = False
     
+
     def set_scale_dependent_shot_noise(self, ):
+        if self.__has_ksq_Pmm:
+            raise ValueError("Cannot set both scale-dependent shot noise and Pmm")
+        self.__has_ksq_shotnoise = True
+        self.__alphas = 2
+        self.__k_stack = np.hstack([self._k, self._k])
+    
+    def set_scale_dependent_Pmm(self, ):
+        if self.__has_ksq_shotnoise:
+            raise ValueError("Cannot set both scale-dependent shot noise and Pmm")
+        self.__has_ksq_Pmm = True
         self.__alphas = 2
         self.__k_stack = np.hstack([self._k, self._k])
 
@@ -143,8 +156,10 @@ class LossFunction:
         alpha, bs = bias[:self.__alphas], bias[self.__alphas:]
         pk_auto, pk_cross = self.sum_Pkij( self._Pkij_list, *bs )
         pk_auto += alpha[0] *self._Pk_shot  # shot noise
-        if self.__alphas == 2:
+        if self.__has_ksq_shotnoise:
             pk_auto += alpha[1] *self._k**2 *self._Pk_shot
+        if self.__has_ksq_Pmm:
+            pk_auto += alpha[1] *self._k**2 *self._Pkij_list[0]
         pk_delta = self._biasPk - np.hstack([pk_auto, pk_cross,])
         val = pk_delta @ self._Cov_inv @ pk_delta
         return val
