@@ -55,9 +55,9 @@ class Emulator(BaseEmulator_GP):
                     "\n  The theoretical 1-loop power spectrum may not included in the `./data` folder due to large size. "
                   + "\n  You may generate them and then remake the emulator. \n" )
         paramsNorm = self.NormalizeParam(self.ext_Params)
-        #self.EmuLoop._train_emulator( paramsNorm, self.k, self.ext_Pkij_T, 
-        #                            to_save=True, filename=self.__FileLoop, )
-        self.EmuLoop._load_emulator( self.__FileLoop )   ## TEST
+        self.EmuLoop._train_emulator( paramsNorm, self.k, self.ext_Pkij_T, 
+                                    to_save=True, filename=self.__FileLoop, )
+        #self.EmuLoop._load_emulator( self.__FileLoop )   ## TEST
         #self.EmuLin ._train_emulator( paramsNorm, self.klin, self.Pkij_lin, 
         #                             to_save=True, filename=self.__FileLin, )
         self.EmuLin ._load_emulator( self.__FileLin  )   ## TEST
@@ -116,8 +116,8 @@ class Emulator(BaseEmulator_GP):
         else:
             self.__Mask_k = np.ones(( 21, len(z_array), len(k_array), ), dtype='int32', )
         for (l, kmax) in [
-            ( 5, 0.3), # (0, 5),   The theory and simulation result are inconsistent in all region. 
-            (10, 0.2), # (1, 5), 
+            ( 5, 0.35), # (0, 5),   The theory and simulation result are inconsistent in all region. 
+            (10, 0.20), # (1, 5), 
             (18, 0.0015), # (4, 4), 
         ]:
             self.__Mask_k[l][..., k_array<kmax ] = 0
