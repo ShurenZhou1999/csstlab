@@ -33,7 +33,7 @@ class Emulator_loop(BaseEmulator_GP):
         if k.shape[0] != pk_T.shape[-1] :
             raise ValueError("The k-bin ranges of `k` and `pk_T` should be the same. ")
         
-        self.PCA_T = Pk_loop_PCA( k, pk_T, kmax=self.__kmax , N_PCs=self.__N_PCs, )
+        self.PCA_T = PrincipalComponentAnalysis__loop( k, pk_T, kmax=self.__kmax , N_PCs=self.__N_PCs, )
         self._set_GPs( Params, self.PCA_T.Array_Aij, )
         self.k = k[self.PCA_T.krange]
         
@@ -60,7 +60,7 @@ class Emulator_loop(BaseEmulator_GP):
         self.k, self.Nk = k, k.shape[0]
         self.N_training_samples = Dload["N_training_samples"]
         
-        self.PCA_T = Pk_loop_PCA( k, None, kmax=self.__kmax , N_PCs=self.__N_PCs, )
+        self.PCA_T = PrincipalComponentAnalysis__loop( k, None, kmax=self.__kmax , N_PCs=self.__N_PCs, )
         self.PCA_T.set_PCs( Dload["Rij"], Dload["PijMean"], None )
         self._load_GPs( filename )
         #Aij = self.PCA_T.set_PCs( Dload["Rij"], Dload["PijMean"], Dload["Aij"] )
@@ -90,10 +90,10 @@ class Emulator_loop(BaseEmulator_GP):
 
     
 
-class Pk_loop_PCA:
+class PrincipalComponentAnalysis__loop:
     def __init__( self, k, Pk_T=None, 
                  kmax=1.05, 
-                 onlyPCA=False, 
+                 onlyPCA=True, 
                  N_PCs=None, 
         ):
         '''

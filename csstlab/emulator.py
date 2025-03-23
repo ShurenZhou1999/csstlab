@@ -20,11 +20,12 @@ class Emulator(BaseEmulator_GP):
         self.__FileLoop = self.__PathData + "GP_loop.npy"
         self.__FileLin  = self.__PathData + "GP_lin.npy"
         self.__kmax = 1.05
+        self.__kmax_lin = 0.008
         self.__Nz = 12
         self.Nloop_samples = 14000       ## The number of samples to train the theory emulator; the parameters like PC numbers are fine-tuned to this sample size.
         self.EmuSimu = Emulator_simu(kmax=self.__kmax)
         self.EmuLoop = Emulator_loop(kmax=self.__kmax)
-        self.EmuLin  = Emulator_loop(kmax=self.__kmax, N_PCs=12, )   # linear scale of 1-loop power spectrum
+        self.EmuLin  = Emulator_loop(kmax=self.__kmax_lin, N_PCs=12, )   # linear scale of 1-loop power spectrum
         self.__set_emulators(remake=remake)
         
         self.__has_set_k_and_z = False
@@ -54,12 +55,12 @@ class Emulator(BaseEmulator_GP):
                     "\n  The theoretical 1-loop power spectrum may not included in the `./data` folder due to large size. "
                   + "\n  You may generate them and then remake the emulator. \n" )
         paramsNorm = self.NormalizeParam(self.ext_Params)
-        self.EmuLoop._train_emulator( paramsNorm, self.k, self.ext_Pkij_T, 
-                                    to_save=True, filename=self.__FileLoop, )
-        #self.EmuLoop._load_emulator( self.__FileLoop )   ## TEST
-        self.EmuLin ._train_emulator( paramsNorm, self.klin, self.Pkij_lin, 
-                                     to_save=True, filename=self.__FileLin, )
-        ##self.EmuLin ._load_emulator( self.__FileLin  )   ## TEST
+        #self.EmuLoop._train_emulator( paramsNorm, self.k, self.ext_Pkij_T, 
+        #                            to_save=True, filename=self.__FileLoop, )
+        self.EmuLoop._load_emulator( self.__FileLoop )   ## TEST
+        #self.EmuLin ._train_emulator( paramsNorm, self.klin, self.Pkij_lin, 
+        #                             to_save=True, filename=self.__FileLin, )
+        self.EmuLin ._load_emulator( self.__FileLin  )   ## TEST
 
         paramsNorm = self.NormalizeParam(self.Parameters)
         paramsNorm_and_z = self.To_Abscissas_MultiCosmo(paramsNorm)
@@ -115,7 +116,7 @@ class Emulator(BaseEmulator_GP):
         else:
             self.__Mask_k = np.ones(( 21, len(z_array), len(k_array), ), dtype='int32', )
         for (l, kmax) in [
-            ( 5, 0.35), # (0, 5),   The theory and simulation result are inconsistent in all region. 
+            ( 5, 0.3), # (0, 5),   The theory and simulation result are inconsistent in all region. 
             (10, 0.2), # (1, 5), 
             (18, 0.0015), # (4, 4), 
         ]:
@@ -175,11 +176,11 @@ class Emulator(BaseEmulator_GP):
 
     def set_intepolation_method(self, method='quintic'):
         '''
-        Using lower order interpolation method, such as `linear` or `cubic`, can accelate the calculation.
+        Using lower order interpolation method, such as `cubic`, can accelate the calculation.
         ------------
         method : str, default is 'quintic',
         '''
-        if method not in [ "linear", "cubic", "quintic" ]:
+        if method not in [ "cubic", "quintic" ]:
             raise ValueError("We do not recommand the method %s for interpolation. " % method)
         self.__intp_method = method
     

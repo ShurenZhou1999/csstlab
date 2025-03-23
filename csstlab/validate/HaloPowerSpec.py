@@ -129,21 +129,32 @@ class LossFunction:
         self.__alphas = 1
         self.__has_ksq_shotnoise = False
         self.__has_ksq_Pmm = False
+        self.__has_suppress_Pgg = False
     
 
-    def set_scale_dependent_shot_noise(self, ):
+    def set_scale_dependent_shot_noise(self, klaw=2, ):
         if self.__has_ksq_Pmm:
             raise ValueError("Cannot set both scale-dependent shot noise and Pmm")
         self.__has_ksq_shotnoise = True
+        self.klaw = klaw
         self.__alphas = 2
         self.__k_stack = np.hstack([self._k, self._k])
     
-    def set_scale_dependent_Pmm(self, ):
+    def set_scale_dependent_Pmm(self, klaw=2, ):
         if self.__has_ksq_shotnoise:
             raise ValueError("Cannot set both scale-dependent shot noise and Pmm")
         self.__has_ksq_Pmm = True
+        self.klaw = klaw
         self.__alphas = 2
         self.__k_stack = np.hstack([self._k, self._k])
+    
+    def set_scale_suppression_Pgg(self, klaw=2):
+        if self.__has_ksq_shotnoise or self.__has_ksq_Pmm:
+            raise ValueError("Cannot set both scale-dependent shot noise and Pmm")
+        self.__has_suppress_Pgg = True
+        self.klaw = klaw
+        self.__alphas = 2
+
 
         
     def __call__(self, bias):
@@ -157,9 +168,12 @@ class LossFunction:
         pk_auto, pk_cross = self.sum_Pkij( self._Pkij_list, *bs )
         pk_auto += alpha[0] *self._Pk_shot  # shot noise
         if self.__has_ksq_shotnoise:
-            pk_auto += alpha[1] *self._k**2 *self._Pk_shot
+            pk_auto += alpha[1] *self._k**self.klaw *self._Pk_shot
         if self.__has_ksq_Pmm:
-            pk_auto += alpha[1] *self._k**2 *self._Pkij_list[0]
+            pk_auto += alpha[1] *self._k**self.klaw *self._Pkij_list[0]
+        if self.__has_suppress_Pgg:
+            pk_auto *= (1 + alpha[1] *self._k**self.klaw )
+        
         pk_delta = self._biasPk - np.hstack([pk_auto, pk_cross,])
         val = pk_delta @ self._Cov_inv @ pk_delta
         return val
