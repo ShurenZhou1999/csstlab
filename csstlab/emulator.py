@@ -132,10 +132,10 @@ class Emulator(BaseEmulator_GP):
         #self.__k_stack = np.hstack([ self.klin, self.k[self.__intp_kdrop:], ])
         self.__intp_kdrop  = self._empty_list
         self.__k_stack     = self._empty_list
-        self.__intp_method = 'quintic'
-        k_stack = np.hstack([ self.klin, self.k[1:], ])
+        self.__intp_method = "cubic"
+        k_stack = np.hstack([ self.klin, self.k, ])
         for l, (i, j) in enumerate(self._index):
-            self.__intp_kdrop[i][j] = 1
+            self.__intp_kdrop[i][j] = 0
             self.__k_stack[i][j] = k_stack
         
         for (i, j, kInd) in [ 
@@ -174,11 +174,11 @@ class Emulator(BaseEmulator_GP):
         self.__SamplingPoint_k_z = None
     
 
-    def set_intepolation_method(self, method='quintic'):
+    def set_intepolation_method(self, method='cubic'):
         '''
         Using lower order interpolation method, such as `cubic`, can accelate the calculation.
         ------------
-        method : str, default is 'quintic',
+        method : str, default is 'cubic',
         '''
         if method not in [ "cubic", "quintic" ]:
             raise ValueError("We do not recommand the method %s for interpolation. " % method)
@@ -250,7 +250,8 @@ class EFTofLSS_Model:
         pass
 
     @staticmethod
-    def Pkij_to_biasPk( pks, b_1, b_2, b_s2, b_n2, b_3=None, ):
+    def CombinePkij( k, pks, 
+                    b_1, b_2, b_s2, b_n2, b_3=None, ):
         '''
         combine the Lagrangian basis power spectrum to the biased tracer power spectrum
         not include the shot noise term in the auto-power spectrum
@@ -269,7 +270,42 @@ class EFTofLSS_Model:
     
 
     @staticmethod
-    def Pkij_to_biasPk_gradient( pks, b_1, b_2, b_s2, b_n2, b_3=None, ):
+    def CombinePkij_replace_nabla2( k, pks, b_1, b_2, b_s2, b_n2, b_3=None, ):
+        '''
+        same as `CombinePkij`, but replace the $\nabla^2\delta$ with $-k^2\delta$
+        '''
+        b_n2 = - k**2 *b_n2
+        P_cross = pks[0] + b_1 *pks[1] + b_2 *pks[2] + b_s2 *pks[3] + b_n2 *pks[0]
+        P_auto =    ( pks[0] + 2*b_1 *pks[1] + 2*b_2 *pks[2] + 2*b_s2 *pks[3] + 2*b_n2 *pks[0] ) + \
+                b_1*(            b_1 *pks[6] + 2*b_2 *pks[7] + 2*b_s2 *pks[8] + 2*b_n2 *pks[1] ) + \
+                b_2*(                            b_2 *pks[11]+ 2*b_s2 *pks[12]+ 2*b_n2 *pks[2]) + \
+                b_s2*(                                           b_s2 *pks[15]+ 2*b_n2 *pks[3]) + \
+                b_n2*(                                                            b_n2 *pks[0]) 
+        if b_3 is not None:
+            P_cross += b_3 * pks[5] 
+            P_auto  += 2* b_3 *( pks[5] + b_1 *pks[10] + b_2 *pks[14] + b_s2 *pks[17] + b_n2 *pks[5] ) \
+                        + b_3*b_3 *pks[20]
+        return P_auto, P_cross
+    
+    
+    @staticmethod
+    def CombinePkij_plus_1shotnoise( k, pks, shotnoise, biasList, ):
+        alpha, bs = biasList[:1], biasList[1:]
+        pk_hh, pk_hm = EFTofLSS_Model.Pkij_to_biasPk( pks, *bs )
+        pk_hh += alpha[0] *shotnoise
+        return pk_hh, pk_hm
+    
+    @staticmethod
+    def CombinePkij_plus_2shotnoise( k, pks, shotnoise, biasList, ):
+        alpha, bs = biasList[:2], biasList[2:]
+        pk_hh, pk_hm = EFTofLSS_Model.Pkij_to_biasPk( pks, *bs )
+        pk_hh += (alpha[0] + alpha[0]*k**2) *shotnoise
+        return pk_hh, pk_hm
+    
+    
+
+    @staticmethod
+    def CombinePkij_gradient( pks, b_1, b_2, b_s2, b_n2, b_3=None, ):
         '''
         Gradient of the biased tracer power spectrum with respect to the bias parameters
         '''

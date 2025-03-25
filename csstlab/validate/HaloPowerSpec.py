@@ -127,32 +127,33 @@ class LossFunction:
         self.one_zeros[:Nd//2] = 1
 
         self.__alphas = 1
-        self.__has_ksq_shotnoise = False
-        self.__has_ksq_Pmm = False
-        self.__has_suppress_Pgg = False
+        self.__auto_has_ksq_shotnoise = False
+        self.__auto_has_ksq_Pmm = False
+        self.__cross_has_ksq_Pmm = False
+        self.__klaw = None
     
 
-    def set_scale_dependent_shot_noise(self, klaw=2, ):
-        if self.__has_ksq_Pmm:
-            raise ValueError("Cannot set both scale-dependent shot noise and Pmm")
-        self.__has_ksq_shotnoise = True
-        self.klaw = klaw
+    def set_auto_ksq_shotnoise(self, klaw=2, ):
+        if self.__alphas == 2:
+            raise ValueError("more than 2 alpha-parameter are given")
+        self.__auto_has_ksq_shotnoise = True
+        self.__klaw = klaw
         self.__alphas = 2
         self.__k_stack = np.hstack([self._k, self._k])
     
-    def set_scale_dependent_Pmm(self, klaw=2, ):
-        if self.__has_ksq_shotnoise:
-            raise ValueError("Cannot set both scale-dependent shot noise and Pmm")
-        self.__has_ksq_Pmm = True
-        self.klaw = klaw
+    def set_auto_ksq_Pmm(self, klaw=2, ):
+        if self.__alphas == 2:
+            raise ValueError("more than 2 alpha-parameter are given")
+        self.__auto_has_ksq_Pmm = True
+        self.__klaw = klaw
         self.__alphas = 2
         self.__k_stack = np.hstack([self._k, self._k])
     
-    def set_scale_suppression_Pgg(self, klaw=2):
-        if self.__has_ksq_shotnoise or self.__has_ksq_Pmm:
-            raise ValueError("Cannot set both scale-dependent shot noise and Pmm")
-        self.__has_suppress_Pgg = True
-        self.klaw = klaw
+    def set_cross_ksq_Pmm(self, klaw=2):
+        if self.__alphas == 2:
+            raise ValueError("more than 2 alpha-parameter are given")
+        self.__cross_has_ksq_Pmm = True
+        self.__klaw = klaw
         self.__alphas = 2
 
 
@@ -165,25 +166,26 @@ class LossFunction:
             bias = [alpha0, (alpha1), b1, b2, bs2 , bn2, b3, ]
         '''
         alpha, bs = bias[:self.__alphas], bias[self.__alphas:]
-        pk_auto, pk_cross = self.sum_Pkij( self._Pkij_list, *bs )
+        pk_auto, pk_cross = self.sum_Pkij( self._k, self._Pkij_list, *bs )
         pk_auto += alpha[0] *self._Pk_shot  # shot noise
-        if self.__has_ksq_shotnoise:
-            pk_auto += alpha[1] *self._k**self.klaw *self._Pk_shot
-        if self.__has_ksq_Pmm:
-            pk_auto += alpha[1] *self._k**self.klaw *self._Pkij_list[0]
-        if self.__has_suppress_Pgg:
-            pk_auto *= (1 + alpha[1] *self._k**self.klaw )
+        if self.__auto_has_ksq_shotnoise:
+            pk_auto += alpha[1] *self._k**self.__klaw *self._Pk_shot
+        if self.__auto_has_ksq_Pmm:
+            pk_auto += alpha[1] *self._k**self.__klaw *self._Pkij_list[0]
+        if self.__cross_has_ksq_Pmm:
+            pk_cross += alpha[1] *self._k**self.__klaw *self._Pkij_list[0]
         
         pk_delta = self._biasPk - np.hstack([pk_auto, pk_cross,])
         val = pk_delta @ self._Cov_inv @ pk_delta
         return val
     
+
     def D(self, bias):
         '''
         loss function gradient
         '''
-        alpha, bs = bias[0], bias[1:]
-        pk_auto, pk_cross = self.sum_Pkij( self._Pkij_list, *bs )
+        alpha, bs = bias[:self.__alphas], bias[self.__alphas:]
+        pk_auto, pk_cross = self.sum_Pkij( self._k, self._Pkij_list, *bs )
         pk_delta = self._biasPk - np.hstack([pk_auto, pk_cross,])
         dfdb_auto, dfdb_cross = self.sum_Pkij_D( self._Pkij_list, *bs )
         temp_ = self._Cov_inv @ pk_delta
