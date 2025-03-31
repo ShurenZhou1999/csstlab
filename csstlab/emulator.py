@@ -20,12 +20,12 @@ class Emulator(BaseEmulator_GP):
         self.__FileLoop = self.__PathData + "GP_loop.npy"
         self.__FileLin  = self.__PathData + "GP_lin.npy"
         self.__kmax = 1.05
-        self.__kmax_lin = 0.008
+        self.__kmax_lin = 0.2
         self.__Nz = 12
         self.Nloop_samples = 14000       ## The number of samples to train the theory emulator; the parameters like PC numbers are fine-tuned to this sample size.
         self.EmuSimu = Emulator_simu(kmax=self.__kmax)
-        self.EmuLoop = Emulator_loop(kmax=self.__kmax)
-        self.EmuLin  = Emulator_loop(kmax=self.__kmax_lin, N_PCs=12, )   # linear scale of 1-loop power spectrum
+        self.EmuLoop = Emulator_loop(kmax=self.__kmax, opt_PCs = 1, )
+        self.EmuLin  = Emulator_loop(kmax=self.__kmax_lin, opt_PCs = 2, )   # linear scale of 1-loop power spectrum
         self.__set_emulators(remake=remake)
         
         self.__has_set_k_and_z = False
@@ -55,12 +55,12 @@ class Emulator(BaseEmulator_GP):
                     "\n  The theoretical 1-loop power spectrum may not included in the `./data` folder due to large size. "
                   + "\n  You may generate them and then remake the emulator. \n" )
         paramsNorm = self.NormalizeParam(self.ext_Params)
-        self.EmuLoop._train_emulator( paramsNorm, self.k, self.ext_Pkij_T, 
-                                    to_save=True, filename=self.__FileLoop, )
-        #self.EmuLoop._load_emulator( self.__FileLoop )   ## TEST
-        #self.EmuLin ._train_emulator( paramsNorm, self.klin, self.Pkij_lin, 
-        #                             to_save=True, filename=self.__FileLin, )
-        self.EmuLin ._load_emulator( self.__FileLin  )   ## TEST
+        #self.EmuLoop._train_emulator( paramsNorm, self.k, self.ext_Pkij_T, 
+        #                            to_save=True, filename=self.__FileLoop, )
+        self.EmuLoop._load_emulator( self.__FileLoop )   ## TEST
+        self.EmuLin ._train_emulator( paramsNorm, self.klin, self.Pkij_lin, 
+                                     to_save=True, filename=self.__FileLin, )
+        #self.EmuLin ._load_emulator( self.__FileLin  )   ## TEST
 
         paramsNorm = self.NormalizeParam(self.Parameters)
         paramsNorm_and_z = self.To_Abscissas_MultiCosmo(paramsNorm)
@@ -132,19 +132,35 @@ class Emulator(BaseEmulator_GP):
         #self.__k_stack = np.hstack([ self.klin, self.k[self.__intp_kdrop:], ])
         self.__intp_kdrop  = self._empty_list
         self.__k_stack     = self._empty_list
-        self.__intp_method = "cubic"
-        k_stack = np.hstack([ self.klin, self.k, ])
+        self.__intp_method = self._empty_list
+        kdrop0 = np.sum( self.klin < self.k[0] ) - 2
+        k_stack = np.hstack([ self.klin[:kdrop0], self.k[0:], ])
         for l, (i, j) in enumerate(self._index):
-            self.__intp_kdrop[i][j] = 0
+            self.__intp_kdrop[i][j] = [kdrop0, 0, ]
             self.__k_stack[i][j] = k_stack
+            if i==j or (i, j)==(0, 1) or (i, j)==(2, 3) :
+                self.__intp_method[i][j] = 'cubic'
+            else:
+                self.__intp_method[i][j] = 'slinear'
+        
         
         for (i, j, kInd) in [ 
-            (0, 5, 20), 
+            (0, 2, 4), 
+            (0, 3, 4), 
+            (1, 2, 5), 
+            (1, 3, 5), 
+            (2, 4, 4), 
+            (3, 4, 4), 
+            (4, 4, 4), 
+            (2, 5, 2), 
+            (3, 5, 2), 
+
             (1, 5, 20), 
             (4, 5, 32), 
         ]: 
-            self.__intp_kdrop[i][j] = kInd 
-            self.__k_stack[i][j] = np.hstack([ self.klin, self.k[kInd:], ])
+            kdrop0 = np.sum( self.klin < self.k[kInd] ) - 3
+            self.__intp_kdrop[i][j] = [kdrop0, kInd, ]
+            self.__k_stack[i][j] = np.hstack([ self.klin[:kdrop0], self.k[kInd:], ])
 
 
 
@@ -161,6 +177,8 @@ class Emulator(BaseEmulator_GP):
                             # self.NormalizeTime(z), 
                             z, k , indexing="ij"  )   ).T
         self.__has_set_k_and_z = True
+        self.__set_k = k
+        self.__set_z = z
         self.__to_k_mask(k, z) 
 
     
@@ -180,8 +198,9 @@ class Emulator(BaseEmulator_GP):
         ------------
         method : str, default is 'cubic',
         '''
-        if method not in [ "cubic", "quintic" ]:
-            raise ValueError("We do not recommand the method %s for interpolation. " % method)
+        #if method not in [ "cubic", "quintic" ]:
+        #    raise ValueError("We do not recommand the method %s for interpolation. " % method)
+        return None
         self.__intp_method = method
     
 
@@ -217,13 +236,13 @@ class Emulator(BaseEmulator_GP):
             pk_lin = self.EmuLin( ParamNorm, )
             pks_out = [ ]
             for l, (i, j) in enumerate(self._index):
-                ik = self.__intp_kdrop[i][j]
+                kdrop0, kdrop1 = self.__intp_kdrop[i][j]
                 data_k  = self.__k_stack[i][j]
-                data_pk = np.hstack([ pk_lin[:, i, j], pk_D[:, i, j, ik: ], ])
+                data_pk = np.hstack([ pk_lin[:, i, j, :kdrop0], pk_D[:, i, j, kdrop1: ], ])
                 ipk_intp = \
                 interpn( (self.z, data_k), data_pk ,       ## redshifts -> TimeNormalized
                         xi = self.__SamplingPoint_k_z , 
-                        method = self.__intp_method,     ## The `quintic` method is accurate for P(k) in low-k .
+                        method = self.__intp_method[i][j],     ## The `quintic` method is accurate for P(k) in low-k .
                         bounds_error = False, 
                         fill_value = None, 
                     ).T[self.__intp_zcut]        ## transform the array to match the shape and order of (Nz, Nk) 

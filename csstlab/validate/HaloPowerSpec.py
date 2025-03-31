@@ -129,6 +129,7 @@ class LossFunction:
         self.__alphas = 1
         self.__auto_has_ksq_shotnoise = False
         self.__auto_has_ksq_Pmm = False
+        self.__cross_has_shotnoise  = False
         self.__cross_has_ksq_Pmm = False
         self.__klaw = None
     
@@ -148,6 +149,13 @@ class LossFunction:
         self.__klaw = klaw
         self.__alphas = 2
         self.__k_stack = np.hstack([self._k, self._k])
+    
+    def set_cross_shotnoise(self):
+        if self.__alphas == 2:
+            raise ValueError("more than 2 alpha-parameter are given")
+        self.__cross_has_shotnoise = True
+        self.__alphas = 2
+        
     
     def set_cross_ksq_Pmm(self, klaw=2):
         if self.__alphas == 2:
@@ -172,6 +180,8 @@ class LossFunction:
             pk_auto += alpha[1] *self._k**self.__klaw *self._Pk_shot
         if self.__auto_has_ksq_Pmm:
             pk_auto += alpha[1] *self._k**self.__klaw *self._Pkij_list[0]
+        if self.__cross_has_shotnoise:
+            pk_cross += alpha[1]   
         if self.__cross_has_ksq_Pmm:
             pk_cross += alpha[1] *self._k**self.__klaw *self._Pkij_list[0]
         

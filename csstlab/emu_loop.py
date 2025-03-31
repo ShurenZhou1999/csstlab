@@ -9,11 +9,33 @@ class Emulator_loop(BaseEmulator_GP):
     '''
     Emulator for the 1-loop power spectrum, ( P_{11}, P_{1\delta}, ... )
     '''
-    def __init__(self, kmax=1.05, N_PCs=None, ):
+    def __init__(self, kmax=1.05, N_PCs=None, opt_PCs = 1, ):
         super().__init__()
         self.GP_kernel = DotProduct(0.1)*Matern(3)
         self.PCA_T = None
         self.__kmax = kmax
+        if opt_PCs == 1 :
+            ## For the loop-emulator 
+            N_PCs = [
+                [ 20  , 20  , 20  , 40  , 20  , 20 , ], 
+                [ None, 20  , 20  , 40  , 20  , 20 , ], 
+                [ None, None, 20  , 40  , 40  , 40 , ], 
+                [ None, None, None, 20  , 20  , 40 , ], 
+                [ None, None, None, None, 20  , 40 , ], 
+                [ None, None, None, None, None, 20 , ], 
+            ]
+        elif opt_PCs == 2 :
+            # for the `Pk_ij` values in linear region
+            N_PCs = [
+                [ 12  , 12  , 30  , 30  , 30  , 12 , ], 
+                [ None, 12  , 12  , 20  , 12  , 12 , ], 
+                [ None, None, 12  , 12  , 20  , 12 , ], 
+                [ None, None, None, 12  , 12  , 20 , ], 
+                [ None, None, None, None, 12  , 12 , ], 
+                [ None, None, None, None, None, 12 , ], 
+            ]
+        else :
+            N_PCs = None
         self.__N_PCs = N_PCs
     
     
