@@ -3,6 +3,68 @@
 
 A python package for modeling the biased tracer in real space within the hybrid Lagrangian bias expansion framework, as one of the extensions of [CSST emulator](https://github.com/czymh/csstemu) series.
 
+
+## Feature
+
+* User-friendly, with a simple interface and easy-to-use API. It relies on the external libraries only `Numpy` and `Scipy`, without any other dependencies or compilation. All the time-consuming parts have been done and stored. 
+* Fast and efficient, with the speed of $O(10^{-2})$ seconds to generate spectra for one cosmology .
+* Emulation with neutrino mass the dynamical dark energy $w_0w_a$. The training simulation [Kun suite](https://kunsimulation.readthedocs.io/en/latest/) simulate over cosmological parameter space
+
+| Parameter          | $\Omega_b$ | $\Omega_{cb}$ | $H_0$ | $n_s$ | $A_s\times 10^{9}$ | $w_0$ | $w_a$ | $\sum M_{\nu}$ |
+| ------------------ | ---------- | ------------- | ----- | ----- | ------------------ | ----- | ----- | --------------- |
+| **Low**    | 0.04       | 0.24          | 60    | 0.92  | 1.7                | -1.3  | -0.5  | 0               |
+| **High**    | 0.06       | 0.40          | 80    | 1.00  | 2.5                | -0.7  | 0.5   | 0.3             |
+
+* More details can be found in the upcoming paper. 
+
+
+
+
+
+
+
+
+### Quick Start
+After importing the library, you can load the emulator with 1 line code, initializing time $0.1 s$. 
 ```python
+from csstlab import Emulator
+emu = Emulator()
+```
+For the default $(k, z)$ bins, the emulator takes about $20\, ms$ to generate the basis spectra for one cosmology. More time is required if one want to sample more fine $(k, z)$ bins.
+```python
+## set the (k, z) bins for the emulator
+k = np.logspace(-3, 0, 200)     # unit : [h/Mpc]
+z = [0.5, 1, 1.5, ]
+emu.set_k_and_z(k, z)
+
+# [Omega_b, Omega_m, h, n_s, 1e9 A_s, w_0, w_a, M_\nu ]
+params = [ 0.048, 0.31, 0.67, 0.9665, 2.105, -0.9, 0.1, 0.03, ]
+Pk_ij = emu(params)
 ```
 
+Here we show the results. 
+```python
+n = 5
+fig, axes = plt.subplots(n, n, dpi=120, figsize=(12, 10.5), sharex=True, )
+ipk = -1
+for j in range(n+1):
+    for i in range(n+1):
+        if i==n or j==n : ipk+=1; continue
+        if i < j: axes[i,j].axis('off') ; continue
+        ipk += 1
+        for iz in range(4):
+            axes[i,j].loglog( k, np.abs(Pk_ij[ipk, iz,]), c=f"C{iz}", label=f"z = {z[iz]}" )
+        
+        vmin, vmax = np.abs(Pk_ij[ipk]).min(), np.abs(Pk_ij[ipk]).max()
+        axes[i,j].set_title( f'⟨{labels[i]},{labels[j]}⟩', fontsize=13)
+        axes[i,j].set_xlim( 0.5e-2, 1 )
+        axes[i,j].set_ylim( vmin*0.9+1e-4, vmax*1.2 )
+for i in range(n):
+    axes[-1,i].set_xlabel(r"k [Mpc$^{-1}h$]", fontsize=12, )
+    axes[i, 0].set_ylabel("P$_{ij}$(k)", fontsize=14, )
+axes[0,0].legend(fontsize=10)
+plt.tight_layout( h_pad=0.8, w_pad=0, )
+plt.show()
+
+```
+![alt text](./demo/figures/basis_spectra.png)

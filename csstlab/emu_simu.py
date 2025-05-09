@@ -37,7 +37,7 @@ class Emulator_simu(BaseEmulator_GP):
         Damping_r2_0 = lambda paras, x : paras[0] * np.exp( - (x-paras[1])**2 )
         #damp_30 = Damping_r2([ 1, 3 ], False, )(karr)
         #damp_31 = Damping_r2([ 2.583e-01,  1.259e+00], False, )(karr)
-        self.damp_32 = Damping_r2_1([ 0.02, 4, ], k)
+        #self.damp_32 = Damping_r2_1([ 0.02, 4, ], k)
         self.damp_42 = Damping_r2_0([ 8, 2, ], k)
         self.damp_53 = Damping_r2_0([ 2, 1.5, ], k)
         self.damp_54 = Damping_r2_0([ 2, 1.5, ], k)
@@ -81,7 +81,7 @@ class Emulator_simu(BaseEmulator_GP):
         '''
         [ fine tunning parameters based on LOO test ]
         '''
-        k_cut = 1     ## the index of first k-bin, to avoid large fluctuation
+        k_cut = 0     ## the index of first k-bin, to avoid large fluctuation
         k_max = 0.8   ## the maximum k range, to avoid the unstable small scale of `pk_T`
         kdrop1 = 5    # 
         kdrop2 = 11
@@ -162,7 +162,7 @@ class Emulator_simu(BaseEmulator_GP):
                 "k" : self.k ,   # note that we only use k < 1.05
                 "Params" : Params, 
                 "Rij" : Rij,
-                "Aij" : None , # Aij, 
+                "Aij" : Aij, 
                 "N_training_samples" : Aij.shape[-1],
                 ## we have saved the Aij in the GP-model, thus we do not need to save the training samples again.
                 #"pk_ratio" : List_pk_ratio,
@@ -172,12 +172,12 @@ class Emulator_simu(BaseEmulator_GP):
     
     def _load_emulator(self, filename):
         Dload = self.load(filename)
-        k, Params = Dload["k"], Dload["Params"] 
+        k, self.Params = Dload["k"], Dload["Params"] 
         self.k, self.Nk = k, k.shape[0]
         self.N_training_samples = Dload["N_training_samples"]
         
         self.PCA_Sim = PrincipalComponentAnalysis__simu( k, None, kmax=self.__kmax , N_PCs=self.__N_PCs, )
-        self.PCA_Sim.set_PCs( Dload["Rij"], None )
+        self.PCA_Sim.set_PCs( Dload["Rij"], Dload["Aij"] )
         self.__set_rescaleDamping(k)
         self._load_GPs( filename )
     
@@ -281,11 +281,10 @@ class PrincipalComponentAnalysis__simu:
 
         if Aij is not None :
             i0, i1 = 0, 0
-            Array_Aij = self.__empty_list
+            self.Array_Aij = self.__empty_list
             for l, (i, j) in enumerate(self.__index):
                 i0, i1 = i1, i1 + self.__get_N_PCs(i, j)
-                Array_Aij[i][j] = Aij[i0:i1].T
-            return Array_Aij
+                self.Array_Aij[i][j] = Aij[i0:i1].T
     
     
     def __call__(self, i, j, a_ij):

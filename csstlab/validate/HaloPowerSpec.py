@@ -219,7 +219,7 @@ class LossFunction:
 
 def SolveEquation( _lossfunc, Nparams=5, Ntry=2):
     '''
-    Multi-method and multi-try to find the global solution
+    Attempt to find the global solution with multi-method and multi-try
     '''
     funcval = 1e10
     sol = None
@@ -229,8 +229,8 @@ def SolveEquation( _lossfunc, Nparams=5, Ntry=2):
             x0 = np.random.uniform(-2, 2, Nparams)
             retu = minimize( _lossfunc, x0 , #= (1,)*Nparams , 
                         #jac="cs" if method!="Powell" else None , #lossfunc.D 
-                        method=method, tol=1e-15, 
-                        options={"maxiter":6000}, 
+                        method=method, tol=1e-10, 
+                        options={"maxiter":20000}, 
                         )
             if funcval > retu["fun"]:
                 funcval = retu["fun"] 

@@ -61,7 +61,7 @@ class BaseEmulator_GP(ABC):
             single `X` for multi-targets `Ys`
         '''
         for (i, j) in self._index : \
-        self.GPs[i][j] = GaussianProcessRegressor( X, Ys[i][j], self.GP_kernel, alpha=1e-12, normalize_y=True, )
+        self.GPs[i][j] = GaussianProcessRegressor( X, Ys[i][j], self.GP_kernel, alpha=1e-10, normalize_y=True, )
     
 
     def _save_GPs(self, filename, ):

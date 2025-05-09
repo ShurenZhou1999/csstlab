@@ -58,9 +58,9 @@ class Emulator(BaseEmulator_GP):
         #self.EmuLoop._train_emulator( paramsNorm, self.k, self.ext_Pkij_T, 
         #                            to_save=True, filename=self.__FileLoop, )
         self.EmuLoop._load_emulator( self.__FileLoop )   ## TEST
-        self.EmuLin ._train_emulator( paramsNorm, self.klin, self.Pkij_lin, 
-                                     to_save=True, filename=self.__FileLin, )
-        #self.EmuLin ._load_emulator( self.__FileLin  )   ## TEST
+        #self.EmuLin ._train_emulator( paramsNorm, self.klin, self.Pkij_lin, 
+        #                             to_save=True, filename=self.__FileLin, )
+        self.EmuLin ._load_emulator( self.__FileLin  )   ## TEST
 
         paramsNorm = self.NormalizeParam(self.Parameters)
         paramsNorm_and_z = self.To_Abscissas_MultiCosmo(paramsNorm)
@@ -165,6 +165,12 @@ class Emulator(BaseEmulator_GP):
 
 
     def set_k_and_z(self, k, z):
+        '''
+        Set the k-bin and z-bin for the interpolation. 
+        ----------
+        k, z : 1D arrays
+        ----------
+        '''
         #if np.max(k) > self.__kmax or np.min(k) < self.k[0] :
         #    warnings.warn("The wavenumber `k` is out of the range of the emulator. Note that these range will be extrapolated. ")
         if np.max(z) > 3 or np.min(z) < 0 :

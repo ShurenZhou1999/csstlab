@@ -9,8 +9,8 @@ from ..emu_loop import Emulator_loop
 _PathData = os.path.dirname(os.path.dirname(__file__)) + "/data/"
 _FileLoop = _PathData + "GP_loop.npy"
 _FileLin  = _PathData + "GP_lin.npy"
-_EmuLoop = Emulator_loop(kmax=1.05)
-_EmuLin  = Emulator_loop(kmax=1.05, N_PCs=12)
+_EmuLoop = Emulator_loop(kmax=1.05, opt_PCs = 1, )
+_EmuLin  = Emulator_loop(kmax=1.05, opt_PCs = 2, )   # linear scale of 1-loop power spectrum
 
 try : _EmuLoop._load_emulator( _FileLoop )
 except:
