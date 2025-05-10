@@ -2,7 +2,7 @@
 
 A Python package for emulation of Lagrangian basis spectra within the EFTofLSS model. The emulator utilizes the hybrid Lagrangian bias expansion framework to model the biased tracer clustering. This is galaxy clustering extension of the CSST emulator series, preparing the theoretical supporting for the upcoming China Space Station Telescope galaxy survey.
 
-Currently, the emulator allows predicting the biased tracer power spectrum in $1\%$ level accuracy. It covers wavelength scale $0.001 \leq k \leq 1.0\,{\rm Mpc}^{-1}h$ and redshift range $0\leq z\leq 3$, combining 1-loop theoretical results in linear region and simulation measurements in non-linear region. The details of training samples are same as the main branch [CSST emulator](https://github.com/czymh/csstemu). 
+Currently, the emulator allows predicting the biased tracer power spectrum in one percent level accuracy. It covers wavelength scale $0.001 \leq k \leq 1.0 {\rm Mpc}^{-1}h$ and redshift range $0\leq z\leq 3$, combining 1-loop theoretical results in linear region and simulation measurements in non-linear region. The details of training samples are same as the main branch [CSST emulator](https://github.com/czymh/csstemu). 
 
 
 
