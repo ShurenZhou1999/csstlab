@@ -92,6 +92,7 @@ class BaseEmulator_GP(ABC):
     # -------------------------------------------------------------------------------------------------
     
     def __set_parameters(self, ):
+        ## The lower & upper bound of Cosmological parameters
         self.ParamRange = np.array([
             [ 0.04, 0.06 ], 
             [ 0.24, 0.40 ], 
@@ -102,7 +103,18 @@ class BaseEmulator_GP(ABC):
             [ -0.5, 0.5 ], 
             [ 0, 0.3],
         ])
-        self.labels = [
+        self.label_Params = [
+            "$\Omega_b$",
+            "$\Omega_m$",
+            "$h$",
+            "$n_s$",
+            "$10^9 A_s$",
+            "$w_0$",
+            "$w_a$",
+            "$M_\nu$",
+        ]
+        ## basis Lagrangian fields
+        self.label_fields = [
             "1", 
             r"$\delta$", 
             r"$\delta^2$", 
@@ -112,8 +124,8 @@ class BaseEmulator_GP(ABC):
         ]
         ## the redshift that the snapshot stored in simulations
         self.Nz = 12
-        self.Redshift = np.array([3.  , 2.5 , 2.  , 1.75, 1.5 , 1.25, 1.  , 0.8 , 0.5 , 0.25, 0.1 , 0.])
-        self.TimeNormalized = self.NormalizeTime(self.Redshift)
+        self.Redshift = np.array([ 3.0, 2.5, 2.0, 1.75, 1.5, 1.25, 1.0, 0.8, 0.5, 0.25, 0.1, 0.0, ])
+        self.TimeNormalized = self.NormalizeTime(self.Redshift)    # normalized time variable
 
     
     def NormalizeParam(self, param ):
@@ -131,6 +143,10 @@ class BaseEmulator_GP(ABC):
 
 
     def NormalizeParam_inv(self, paramNorm ):
+        '''
+        Inverse the normalization of cosmological parameters from [-1, 1] to physical scale
+        see `NormalizeParam` for the details
+        '''
         ## attention the last dimension is casted
         return ( np.array(paramNorm) + 1 ) *0.5 *(self.ParamRange[:, 1]-self.ParamRange[:, 0]) + self.ParamRange[:, 0]
     
@@ -143,6 +159,10 @@ class BaseEmulator_GP(ABC):
     
 
     def NormalizeTime_inv(self, TimeNorm ):
+        '''
+        Inverse the normalization of redshift from [-1, 1] to physical scale
+        see `NormalizeTime` for the details
+        '''
         return 1 /(np.array(TimeNorm) + 5./3.) *3./8. -1
     
 
@@ -221,7 +241,7 @@ class Selection_TheoreticalTemplate:
     @staticmethod
     def Combine_TheoreticalTempate_shape21( Pk_cleft, Pk_kecl, ):
         '''
-        We make use of the theoretical templates from `CLEFT` and `KECLEAN`. 
+        We make use of the theoretical templates from `CLEFT` and `KECLEFT`. 
         The choices of which templates to be used for the specific `P_{ij}` are given by test. 
 
         Parameters
