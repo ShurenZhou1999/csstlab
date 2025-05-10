@@ -24,7 +24,7 @@ Currently, the emulator allows predicting the biased tracer power spectrum in on
 
 ## Installation
 
-Installation via direct clone or `pip`
+Installation via direct `git clone` or `pip`
 ```bash
 pip install git+https://github.com/ShurenZhou1999/csstlab
 ```
