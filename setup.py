@@ -4,6 +4,9 @@ setup(
     name="csstlab",
     version="1.0",
     packages=find_packages(), 
+    package_data={
+        "my_package": ["data/*.npy"], 
+    },
     install_requires=[ 
         "numpy",
         "scipy",

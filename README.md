@@ -22,9 +22,16 @@ Currently, the emulator allows predicting the biased tracer power spectrum in on
 
 
 
+## Installation
+
+Installation via direct clone or `pip`
+```bash
+pip install git+https://github.com/ShurenZhou1999/csstlab
+```
 
 
 ## Quick Start
+
 After importing the library, you can load the emulator in one line Python code, with initialization time $\sim 0.1 s$. 
 ```python
 from csstlab import Emulator, EFTofLSS_Model
