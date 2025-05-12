@@ -1,6 +1,6 @@
 import sys, os, warnings
 import numpy as np
-from scipy.interpolate import interpn
+from scipy.interpolate import RectBivariateSpline
 from .base import BaseEmulator_GP
 from .emu_simu import Emulator_simu
 from .emu_loop import Emulator_loop
@@ -134,12 +134,11 @@ class Emulator(BaseEmulator_GP):
         '''
         if k_array is None : k_array = self.__k
         if z_array is None : z_array = self.__z
-        if len(z_array) == 1:
-            ## Given single redshift, return 1-D array instead of 2-D array
-            ## see inner function :: self.set_k_and_z
-            self.__Mask_k = np.ones(( 21, len(k_array), ), dtype='int32', )
-        else:
-            self.__Mask_k = np.ones(( 21, len(z_array), len(k_array), ), dtype='int32', )
+        self.__Mask_k = np.ones(( 21, len(z_array), len(k_array), ), dtype='int32', )
+        ## Given single redshift, return 1-D array instead of 2-D array
+        ## see inner function :: self.set_k_and_z
+        if len(z_array)==1 :
+            self.__Mask_k = np.squeeze(self.__Mask_k, axis=1)
         for (l, kmax) in [
             ( 5, 0.35), # (0, 5),   The theory and simulation result are inconsistent in all region. 
             (10, 0.20), # (1, 5), 
@@ -155,18 +154,13 @@ class Emulator(BaseEmulator_GP):
         ## 
         #self.__intp_kdrop = 1      ## drop the first few k-bin in data
         #self.__k_stack = np.hstack([ self.__klin, self.__k[self.__intp_kdrop:], ])
-        self.__intp_kdrop  = self._empty_list
-        self.__k_stack     = self._empty_list
-        self.__intp_method = self._empty_list
+        self.__intp_kdrop = self._empty_list
+        self.__k_stack    = self._empty_list
         kdrop0 = np.sum( self.__klin < self.__k[0] ) - 2
         k_stack = np.hstack([ self.__klin[:kdrop0], self.__k[0:], ])
         for l, (i, j) in enumerate(self._index):
             self.__intp_kdrop[i][j] = [kdrop0, 0, ]
             self.__k_stack[i][j] = k_stack
-            if i==j or (i, j)==(0, 1) or (i, j)==(2, 3) :
-                self.__intp_method[i][j] = 'cubic'
-            else:
-                self.__intp_method[i][j] = 'slinear'
         
         for (i, j, kInd) in [ 
             (0, 2, 4), 
@@ -197,25 +191,29 @@ class Emulator(BaseEmulator_GP):
             The k-bin should be in the range of [0.001, 1.05] h/Mpc, and the z-bin should be in the range of [0, 3].
         ----------
         '''
+        k = np.atleast_1d(k)
+        z = np.atleast_1d(z)
+
         if np.max(k) > self.__kmax or np.min(k) < self.__kmin :
             warnings.warn( f"\nThe wavenumber `k` is out of the range of the emulator ({self.__kmin} < k < {self.__kmax} h/Mpc). \n"
                           +f"Note that for those k < {self.__kmin} or k > {self.__kmax}, the emulator will be extrapolated. ")
         if np.max(z) > 3 or np.min(z) < 0 :
             warnings.warn("\nThe redshift `z` is out of the range of the emulator (0 < z < 3). \n"
                           +f"Note that for those z < 0 or z > 3, the emulator will be extrapolated. ")
-        if not isinstance(k, np.ndarray) : k = np.atleast_1d(k)
-        if not isinstance(z, np.ndarray) : z = np.atleast_1d(z)
+        if np.any( np.diff(k) <= 0 ):
+            raise Warning("The `k` array should be in strictly ascending order")
+        if np.any( np.diff(np.sort(z)) <= 0 ):
+            raise Warning("The `z` array should be in strictly ascending order")
 
-        if len(z)==1 : self.__intp_zcut = 0       ## Given single redshift, return 1-D array instead of 2-D array
-        else         : self.__intp_zcut = ...
-
-        self.__SamplingPoint_k_z = np.array( np.meshgrid( 
-                            # self.NormalizeTime(z), 
-                            z, k , indexing="ij"  )   ).T
+        if len(z)==1 : self.__intp_zsort = 0       ## Given single redshift, return 1-D array instead of 2-D array
+        else         : self.__intp_zsort = np.argsort(z)     ## The redshift is ordered by `z=0 -> z=3` as the interpolation function requires.
+        
         self.__has_set_k_and_z = True
         self.__set_k = k
-        self.__set_z = z
+        self.__set_z = z[self.__intp_zsort]
         self.__to_k_mask(k, z) 
+        self.__set_pkij = np.zeros(( 21, len(z), len(k), ), dtype='float64', )
+        self.__set_pkij = np.squeeze(self.__set_pkij)     ## shape as (21, Nk) if `z` is a scalar
 
     
     def unset_k_and_z(self, ):
@@ -224,8 +222,8 @@ class Emulator(BaseEmulator_GP):
         '''
         self.__has_set_k_and_z = False
         self.__to_k_mask()
-        self.__intp_zcut = None
-        self.__SamplingPoint_k_z = None
+        self.__intp_zsort = None
+        self.__set_k , self.__set_z  = None, None
     
 
     @property
@@ -268,7 +266,7 @@ class Emulator(BaseEmulator_GP):
         Param : 1D array with shape (8)
 
         If k and z are set, return P_ij array, with shape (21, Nz, Nk), where 21 is the number of P_ij components.
-        Otherwise, the Nz and Nk is the default value in training the emulator.
+        Otherwise, the (k, z) bins are the default setting in training the emulator.
         '''
         ParamNorm = self.NormalizeParam(Param)
         if np.any( np.abs(ParamNorm) > 1):
@@ -279,23 +277,18 @@ class Emulator(BaseEmulator_GP):
         
         if self.__has_set_k_and_z :
             pk_lin = self.EmuLin( ParamNorm, )
-            pks_out = [ ]
             for l, (i, j) in enumerate(self._index):
                 kdrop0, kdrop1 = self.__intp_kdrop[i][j]
-                data_k  = self.__k_stack[i][j]
                 data_pk = np.hstack([ pk_lin[:, i, j, :kdrop0], pk_D[:, i, j, kdrop1: ], ])
-                ipk_intp = \
-                interpn( (self.__z, data_k), data_pk ,       ## redshifts -> TimeNormalized
-                        xi = self.__SamplingPoint_k_z , 
-                        method = self.__intp_method[i][j],     ## The `quintic` method is accurate for P(k) in low-k .
-                        bounds_error = False, 
-                        fill_value = None, 
-                    ).T[self.__intp_zcut]        ## transform the array to match the shape and order of (Nz, Nk) 
-                pks_out.append( ipk_intp )
-            return pks_out *self.__Mask_k
+                self.__set_pkij[l] = \
+                RectBivariateSpline(
+                    self.__z[::-1], self.__k_stack[i][j], data_pk[::-1],   ## `z` axis should be descending
+                    kx=3, ky=3,  
+                )(  self.__set_z, self.__set_k, grid=True,  )[self.__intp_zsort]
+            return  self.__set_pkij *self.__Mask_k
         else:
             pk_D = [ pk_D[:, i, j] for (i, j) in self._index ]
-            return pk_D *self.__Mask_k
+            return  pk_D *self.__Mask_k
     
 
     @property

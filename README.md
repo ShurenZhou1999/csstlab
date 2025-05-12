@@ -10,7 +10,7 @@ Currently, the emulator allows predicting the biased tracer power spectrum in on
 ## Feature
 
 * User-friendly, with simple interface and easy-to-use API. It only relies on the external libraries `Numpy` and `Scipy`, without any other dependencies or compilation requirement. All the time-consuming parts have been done and stored. 
-* Fast and efficient, with the speed of $\mathcal{O}(10^{-2})$ seconds to generate all the Lagrangian basis spectra for a given cosmology. For arbitrary $(k, z)$ bins, it takes $\mathcal{O}(10^{-1})$ seconds to interpolate the all the basis spectra.
+* Fast and efficient, with the speed of $\mathcal{O}(10^{-2})$ seconds to generate all the Lagrangian basis spectra for a given cosmology. 
 * Emulation with neutrino mass the dynamical dark energy $w_0w_a$. The training set [Kun suite](https://kunsimulation.readthedocs.io/en/latest/) simulates over cosmological parameter space 
 
 | Parameter | $\Omega_b$ | $\Omega_{cb}$ | $H_0$ | $n_s$ | $10^{9}A_s$ | $w_0$ | $w_a$ | $\sum M_{\nu}$ |
@@ -48,7 +48,7 @@ emu.set_k_and_z(k, z)
 
 # [Omega_b, Omega_m, h, n_s, 1e9 A_s, w_0, w_a, M_\nu ]
 params = [ 0.048, 0.31, 0.67, 0.9665, 2.105, -0.9, 0.1, 0.03, ]
-Pk_ij = emu(params)      ## 1 line to generate all basis spectra, ~ 20 ms
+Pk_ij = emu(params)      ## 1 line to generate all basis spectra. It takes about 10 ~ 20 ms .
 ```
 
 Here we show the basis spectra for first 5 Lagrangian basis fields, $1, \delta, \delta^2, s^2 $ and $\nabla^2\delta$. 
@@ -96,6 +96,8 @@ More examples can be found in the [notebook](./demo/demo.ipynb).
 
 
 
+
 ## Acknowledgements
 
-For any questions, please feel free to contact me at <zhoushuren@sjtu.edu.cn>.
+For any questions, contact me at <zhoushuren@sjtu.edu.cn>.
+
