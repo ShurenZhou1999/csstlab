@@ -291,6 +291,24 @@ class Emulator(BaseEmulator_GP):
             return  pk_D *self.__Mask_k
     
 
+
+    
+    def __repr__(self, ):
+        return "Hybrid Lagrangian Bias Expansion Emulator\n" \
+            + f"  k-range : [{self.__kmin}, {self.__kmax}] h/Mpc\n" \
+            + f"  z-range : [{0}, {3}] \n" \
+            + f"\n" \
+            + f"  Cosmological parameters list should be given in following ordering and ranges : \n" \
+            + f"    Omega_b  : {0.04} - {0.06}\n" \
+            + f"    Omega_m  : {0.24} - {0.40}\n" \
+            + f"    h        : {0.6} - {0.8}\n" \
+            + f"    n_s      : {0.92} - {1.00}\n" \
+            + f"    10^9 A_s : {1.7} - {2.5}\n" \
+            + f"    w_0      : {-1.3} - {-0.7}\n" \
+            + f"    w_a      : {-0.5} - {0.5}\n" \
+            + f"    M_nu     : {0} - {0.3} eV\n" 
+    
+
     @property
     def EFTofLSS_Model(self,):
         return EFTofLSS_Model
