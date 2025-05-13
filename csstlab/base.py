@@ -201,6 +201,29 @@ class BaseEmulator_GP(ABC):
         ]).T
     
 
+    
+    def Check_Range_Params(self, params ):
+        '''
+        Check if the 8 cosmological parameters are in the range of the training set
+        '''
+        params = np.array(params)
+        if params.shape[-1] != 8 :
+            raise ValueError("The shape of `params` should be (*, 8). ")
+        return np.all( (params >= self.ParamRange[:, 0]) & (params <= self.ParamRange[:, 1]) )
+    
+
+    def Check_Range_z(self, z ):
+        if np.any(z < 0) or np.any(z > 3) : return False
+        return True
+    
+    
+    
+
+
+
+
+    
+
 # -------------------------------------------------------------------------------------------------
 # -------------------------------------------------------------------------------------------------
 

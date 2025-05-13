@@ -352,6 +352,7 @@ class EFTofLSS_Model:
         pk_hh += alpha[0] *shotnoise
         return pk_hh, pk_hm
     
+    
     @staticmethod
     def CombinePkij_plus_2shotnoise( k, pks, shotnoise, biasList, ):
         alpha, bs = biasList[:2], biasList[2:]

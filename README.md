@@ -26,8 +26,10 @@ Currently, the emulator allows predicting the biased tracer power spectrum in on
 
 Installation via direct `git clone` or `pip`
 ```bash
-pip install git+https://github.com/ShurenZhou1999/csstlab
+pip install -v git+https://github.com/ShurenZhou1999/csstlab
 ```
+Plus the `--upgrade` flag to update the package to the latest version. 
+
 
 
 ## Quick Start
@@ -51,7 +53,7 @@ params = [ 0.048, 0.31, 0.67, 0.9665, 2.105, -0.9, 0.1, 0.03, ]
 Pk_ij = emu(params)      ## 1 line to generate all basis spectra. It takes about 10 ~ 20 ms .
 ```
 
-Here we show the basis spectra for first 5 Lagrangian basis fields, $1, \delta, \delta^2, s^2 $ and $\nabla^2\delta$. 
+Here we show the basis spectra for first 5 Lagrangian basis fields, $1$, $\delta$, $\delta^2$, $s^2$ and $\nabla^2\delta$. 
 ```python
 import matplotlib.pyplot as plt
 
@@ -99,5 +101,5 @@ More examples can be found in the [notebook](./demo/demo.ipynb).
 
 ## Acknowledgements
 
-For any questions, contact me at <zhoushuren@sjtu.edu.cn>.
+For any question, contact me at <zhoushuren@sjtu.edu.cn>.
 
