@@ -1,0 +1,232 @@
+import sys, os
+from abc import ABC, abstractmethod
+from .jax_GaussianProcess import GaussianProcessRegressor
+
+import jax
+from jax import numpy as jnp
+jax.config.update("jax_enable_x64", True)
+
+
+
+class BaseEmulator_GP(ABC):
+    def __init__(self, ):
+        self.GP_kernel = None
+        self.GPs = self._empty_list
+        self._index =  [ (i, j) for i in range(6) for j in range(i, 6) ]
+        self.__set_parameters()
+
+    @property
+    def _empty_list(self, ):
+        return [ [None for i in range(6)] for j in range(6) ]
+    
+
+    # -------------------------------------------------------------------------------------------------
+    # Utils for Gaussian Process fitting
+    # -------------------------------------------------------------------------------------------------
+    
+    @abstractmethod
+    def _train_emulator(self, **kwargs):
+        '''
+        train the emulator
+        '''
+        pass
+    
+    @abstractmethod
+    def _load_emulator(self, **kwargs):
+        '''
+        load all the emulator data
+        '''
+        pass
+    
+
+    def save(self, filename, data, ) :
+        '''
+        save a single Numpy file
+        '''
+        path0 = os.path.dirname(filename) 
+        if not os.path.exists(path0) : os.makedirs(path0)
+        jnp.save( filename , jnp.array(data) )
+    
+
+    def load(self, filename=None, ):
+        '''
+        load a single Numpy file
+        '''
+        if not os.path.exists(filename) : 
+            raise ValueError( f"The file {filename} does not exist. ")
+        return jnp.load( filename , allow_pickle=True)[()]
+    
+
+    def _set_GPs(self, X, Ys):
+        '''
+        train the Gaussian Process models with the input `X` and `Ys`
+            single `X` for multi-targets `Ys`
+        '''
+        for (i, j) in self._index : \
+        self.GPs[i][j] = GaussianProcessRegressor( X, Ys[i][j], self.GP_kernel, alpha=1e-10, normalize_y=True, )
+    
+
+    def _save_GPs(self, filename, ):
+        '''
+        save all the trained Gaussian Process models to Numpy files
+        '''
+        if filename[-4:] == ".npy" : filename = filename[:-4]
+        for (i, j) in self._index : \
+        self.GPs[i][j].save( filename + f"_GPmodel_ij-{i}{j}.npy" )
+    
+
+    def _load_GPs(self, filename, ):
+        '''
+        load all the trained Gaussian Process models from Numpy files
+        '''
+        if filename[-4:] == ".npy" : filename = filename[:-4]
+        for (i, j) in self._index :
+            path_ij = filename + f"_GPmodel_ij-{i}{j}.npy" 
+            if not os.path.exists(path_ij) :
+                raise ValueError( f"The Gaussian Process model file {path_ij} does not exist. ")
+            self.GPs[i][j] = GaussianProcessRegressor( kernel=self.GP_kernel, )
+            self.GPs[i][j].load( path_ij )
+        
+
+
+    # -------------------------------------------------------------------------------------------------
+    # Parameters rescaling
+    # -------------------------------------------------------------------------------------------------
+    
+    def __set_parameters(self, ):
+        ## The lower & upper bound of Cosmological parameters
+        self.ParamRange = jnp.array([
+            [ 0.04, 0.06 ], 
+            [ 0.24, 0.40 ], 
+            [ 0.6, 0.8 ], 
+            [ 0.92, 1.00 ], 
+            [ 1.7, 2.5 ], 
+            [ -1.3, -0.7],
+            [ -0.5, 0.5 ], 
+            [ 0, 0.3],
+        ])
+        self.ParamRange_LO = jnp.array(self.ParamRange[:, 0], dtype=jnp.float64)
+        self.ParamRange_UP = jnp.array(self.ParamRange[:, 1], dtype=jnp.float64)
+
+        self.label_Params = [
+            "$\Omega_b$",
+            "$\Omega_m$",
+            "$h$",
+            "$n_s$",
+            "$10^9 A_s$",
+            "$w_0$",
+            "$w_a$",
+            "$M_\nu$",
+        ]
+        ## basis Lagrangian fields
+        self.label_fields = [
+            "1", 
+            r"$\delta$", 
+            r"$\delta^2$", 
+            r"$s^2$", 
+            r"$\nabla^2\delta$", 
+            r"$\delta^3$", 
+        ]
+        ## the redshift that the snapshot stored in simulations
+        self.Nz = 12
+        self.Redshift = jnp.array([ 3.0, 2.5, 2.0, 1.75, 1.5, 1.25, 1.0, 0.8, 0.5, 0.25, 0.1, 0.0, ])
+        self.TimeNormalized = self.NormalizeTime(self.Redshift)    # normalized time variable
+
+    
+    def NormalizeParam(self, param ):
+        '''
+        Normalize the cosmological parameters to [-1, 1], 
+            ( Omega_b, Omega_m, h, n_s, 10^9 As, w0, w_a, M_nu, )
+        --------------------------------
+        param :: 8 cosmologcial parameters, not include the redshift
+                1D array with shape (8)
+                2D array with shape (Ncosmo, 8)
+        --------------------------------
+        '''
+        ## attention the last dimension is casted
+        return (jnp.array(param) - self.ParamRange_LO ) /(self.ParamRange_UP -self.ParamRange_LO) *2. - 1.
+
+
+    def NormalizeParam_inv(self, paramNorm ):
+        '''
+        Inverse the normalization of cosmological parameters from [-1, 1] to physical scale
+        see `NormalizeParam` for the details
+        '''
+        ## attention the last dimension is casted
+        return ( jnp.array(paramNorm) + 1 ) *0.5 *(self.ParamRange_UP -self.ParamRange_LO) + self.ParamRange_LO
+    
+
+    def NormalizeTime(self, z ):
+        '''
+        Normalize the redshift from physical scale 0 < z < 3 to [-1, 1]. 
+        '''
+        return 1 /(jnp.array(z) +1) *8./3. - 5./3.
+    
+
+    def NormalizeTime_inv(self, TimeNorm ):
+        '''
+        Inverse the normalization of redshift from [-1, 1] to physical scale
+        see `NormalizeTime` for the details
+        '''
+        return 1 /(jnp.array(TimeNorm) + 5./3.) *3./8. -1
+    
+
+
+    def To_Abscissas(self, ParamsNormalied ):
+        '''
+        Convert the Array of cosmological parameters to the normalized abscissas
+        --------------------------------
+        ParamsNormalied : 1D array, shape (8). Normalized cosmological parameters.
+        --------------------------------
+        return : 
+            2D array, shape (Nz, N_Abscissas=9)
+        '''
+        return jnp.vstack([
+            jnp.tile( ParamsNormalied.reshape(8, 1), self.Nz, ) , 
+            self.TimeNormalized
+        ]).T
+    
+
+    def To_Abscissas_MultiCosmo(self, ParamsNormalied ):
+        '''
+        Convert the Array of cosmological parameters to the normalized abscissas
+        Simplified version of `To_Abscissas` is provided for the fast response when called. 
+
+        --------------------------------
+        ParamsNormalied : 1D/2D array, shape (8) or (Ncosmo, 8). Normalized cosmological parameters.
+        --------------------------------
+        return : 
+            2D array, shape (N_samples, N_Abscissas) = (Ncosmo*Nz, 9)
+        '''
+        ParamsNormalied = jnp.array(ParamsNormalied).reshape(-1, 8)
+        Ncosmo = ParamsNormalied.shape[0]
+        return jnp.vstack([
+            jnp.tile( ParamsNormalied.T.reshape(8, Ncosmo, 1), self.Nz, ).reshape(8, -1) , 
+            jnp.tile( self.TimeNormalized.reshape(-1, 1), Ncosmo ).T.reshape(-1) ,
+        ]).T
+    
+
+    
+    def check_range_paramters(self, params ):
+        '''
+        Check if the 8 cosmological parameters are in the range of the training set
+        '''
+        params = jnp.array(params)
+        if params.shape[-1] != 8 :
+            raise ValueError("The shape of `params` should be (*, 8). ")
+        return jnp.all( (params >= self.ParamRange[:, 0]) & (params <= self.ParamRange[:, 1]) )
+    
+
+    def check_range_z(self, z ):
+        if jnp.any(z < 0) or jnp.any(z > 3) : return False
+        return True
+    
+    
+    
+
+
+
+
+    
+# -------------------------------------------------------------------------------------------------
+# -------------------------------------------------------------------------------------------------
