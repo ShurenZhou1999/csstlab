@@ -217,7 +217,7 @@ class Emulator(BaseEmulator_GP):
         
         self.__has_set_k_and_z = True
         self.__set_k = k
-        self.__set_z = z[self.__intp_zsort]
+        self.__set_z = jnp.atleast_1d( z[self.__intp_zsort] )
         #self.__set_kz_points = jnp.array( jnp.meshgrid( self.__set_z, self.__set_k, indexing='ij', ) ).reshape(2, -1).T
         #self.__set_kz_shape = ( self.__set_z.shape[0], self.__set_k.shape[0], )
         self.__to_k_mask(k, z) 
@@ -306,7 +306,7 @@ class Emulator(BaseEmulator_GP):
             return  pk_D *self.__Mask_k
     
 
-    @classmethod
+    
     def Pk_ij( self, 
             Omega_b = None, 
             Omega_m = None, 
@@ -325,7 +325,6 @@ class Emulator(BaseEmulator_GP):
         ]) )
     
 
-    @classmethod
     def set_derivative(self, 
             pre_fun : bool = False, 
         ):
@@ -337,18 +336,16 @@ class Emulator(BaseEmulator_GP):
         '''
         self._func_deri1 = [ jax.jacfwd(self.Pk_ij, argnums=(i) )
                         for i in range(8) ]
-        self._func_deri2 = [
-            [ jax.jacfwd( self._func_deri1[i], argnums=(j) )
-                for j in range(i, 8) ]
-                for i in range(8)
-        ]
+        self._func_deri2 = [ [ None for j in range(8) ] for i in range(8) ]
+        for i in range(8):
+            for j in range(i, 8):
+                self._func_deri2[i][j] = jax.jacfwd( self._func_deri1[i], argnums=(j) )
         if pre_fun :
             p0 = 0.5*(self.ParamRange_LO + self.ParamRange_HI)
             self.Pk_ij_Dparam(*p0, Iparam=0)
             self.Pk_ij_DparamDparam(*p0, Iparam1=0, Iparam2=0, )
         
 
-    @classmethod
     def Pk_ij_Dparam(self, 
             Omega_b = None, 
             Omega_m = None, 
