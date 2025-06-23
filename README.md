@@ -1,34 +1,42 @@
 ## CSSTLaB : <ins>C</ins>hina <ins>S</ins>pace <ins>S</ins>tation <ins>T</ins>elescope Hybrid <ins>La</ins>grangian <ins>B</ins>ias Expansion Emulator
 
-A Python package for emulation of Lagrangian basis spectra within the EFTofLSS model. The emulator utilizes the hybrid Lagrangian bias expansion framework to model the biased tracer clustering. This is galaxy clustering extension of the CSST emulator series, preparing the theoretical supporting for the upcoming China Space Station Telescope galaxy survey.
+A Python package for emulation of Lagrangian basis spectra within the EFTofLSS model. The emulator utilizes the hybrid Lagrangian bias expansion framework to model the biased tracer clustering. This is galaxy clustering extension of the [CSST emulator series](https://github.com/czymh/csstemu), for the theoretical supporting of the upcoming China Space Station Telescope galaxy survey.
 
-Currently, the emulator allows predicting the biased tracer power spectrum in one percent level accuracy. It covers wavelength scale $0.001 \leq k \leq 1.0 {\rm Mpc}^{-1}h$ and redshift range $0\leq z\leq 3$, combining 1-loop theoretical results in linear region and simulation measurements in non-linear region. The details of training samples are same as the main branch [CSST emulator](https://github.com/czymh/csstemu). 
+Currently, the emulator allows the biased tracer power spectrum prediction in one percent level accuracy. It covers wavelength scale $0.001 \leq k \leq 1.0 {\rm Mpc}^{-1}h$ and redshift range $0\leq z\leq 3$, combining 1-loop theoretical results in linear region and simulation measurements in non-linear region. More technical details can be found in the [arXiv paper](https://arxiv.org/abs/2506.04671). Two emulator versions are provided, 
+* [./csstlab](./csstlab) : `Numpy` & `Scipy` implementation of the emulation. 
+* [./csstlab_jax](./csstlab_jax) : `JAX` implementation of the emulation, allowing auto-differentiation. 
+
 
 
 
 
 ## Feature
 
-* User-friendly, with simple interface and easy-to-use API. It only relies on the external libraries `Numpy` and `Scipy`, without any other dependencies or compilation requirement. All the time-consuming parts have been done and stored. 
+* User-friendly, with simple interface and easy-to-use API. All the time-consuming parts have been done and stored,  without any other dependencies or compilation requirement. 
 * Fast and efficient, with the speed of $\mathcal{O}(10^{-2})$ seconds to generate all the Lagrangian basis spectra for a given cosmology. 
+* Differentiation emulation. We provide a `JAX` implementation of the emulator, allowing predication of the power spectrum derivative with respect to cosmological parameters. 
 * Emulation with neutrino mass the dynamical dark energy $w_0w_a$. The training set [Kun suite](https://kunsimulation.readthedocs.io/en/latest/) simulates over cosmological parameter space 
+
+<div align="center">
 
 | Parameter | $\Omega_b$ | $\Omega_{cb}$ | $H_0$ | $n_s$ | $10^{9}A_s$ | $w_0$ | $w_a$ | $\sum M_{\nu}$ |
 | ------------------ | ---------- | ------------- | ----- | ----- | ------------------ | ----- | ----- | --------------- |
 | **Low**    | 0.04       | 0.24          | 60    | 0.92  | 1.7                | -1.3  | -0.5  | 0               |
 | **High**    | 0.06       | 0.40          | 80    | 1.00  | 2.5                | -0.7  | 0.5   | 0.3             |
-
-* Current emulation supports the biased tracer power spectrum in real space. More details can be found in the upcoming paper. 
+</div>
 
 
 
 ## Installation
 
-Installation via direct `git clone` or `pip`
+Installation via `pip`
 ```bash
 pip install -v git+https://github.com/ShurenZhou1999/csstlab
 ```
-Plus the `--upgrade` flag to update the package to the latest version. 
+or direct `git clone` to use the auto-differentiation version.
+```bash
+git clone https://github.com/ShurenZhou1999/csstlab
+```
 
 
 
@@ -94,7 +102,7 @@ pk_hh += alpha * 1./n_g
 # plt.loglog( k, pk_hh, label="$P_{hh}$" )
 # plt.loglog( k, pk_hm, label="$P_{hm}$" )
 ```
-More examples can be found in the [notebook](./demo/demo.ipynb). 
+More examples can be found in the [notebook](./demo/demo.ipynb). For the `JAX` implementation, refer to [notebook](./demo/demo_jax.ipynb).
 
 
 

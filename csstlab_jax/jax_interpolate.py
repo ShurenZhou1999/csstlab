@@ -7,15 +7,15 @@ jax.config.update("jax_enable_x64", True)
 @jax.jit
 def _compute_1D_spline_coeffs_k1(x, Y):
     h = jnp.diff(x)
-    a = Y[:, :-1]
-    b = (Y[:, 1:] - Y[:, :-1]) / h
+    a = Y[:-1].T
+    b = (Y[1:] - Y[:-1]).T / h
     coeffs = jnp.stack([a, b], axis=2)
     return coeffs
 
 
 @jax.jit
 def _compute_1D_spline_coeffs_k2(x, Y):
-    K, M = Y.shape
+    M, K = Y.shape
     n_intervals = M - 1
     h = jnp.diff(x)
     
@@ -23,14 +23,14 @@ def _compute_1D_spline_coeffs_k2(x, Y):
     rhs = jnp.zeros((K, n_intervals))
     
     A = A.at[0, :2].set([ h[0], h[1], ])
-    rhs = rhs.at[:, 0].set( (Y[:, 2] - Y[:, 1])/h[1] - (Y[:, 1] - Y[:, 0])/h[0] )
+    rhs = rhs.at[:, 0].set( (Y[2] - Y[1])/h[1] - (Y[1] - Y[0])/h[0] )
     
     for i in range(1, n_intervals-1):
         A = A.at[i, i-1:i+2].set([ h[i], 2*(h[i-1] + h[i]), h[i-1] ])
-        rhs = rhs.at[:, i].set( 3*((Y[:, i+1] - Y[:, i])/h[i] - (Y[:, i] - Y[:, i-1])/h[i-1]) )
+        rhs = rhs.at[:, i].set( 3*((Y[i+1] - Y[i])/h[i] - (Y[i] - Y[i-1])/h[i-1]) )
     
     A = A.at[-1, -2:].set([ h[-1], h[-2] ])
-    rhs = rhs.at[:, -1].set( (Y[:, -1] - Y[:, -2])/h[-1] - (Y[:, -2] - Y[:, -3])/h[-2] )
+    rhs = rhs.at[:, -1].set( (Y[-1] - Y[-2])/h[-1] - (Y[-2] - Y[-3])/h[-2] )
     
     try:
         c = jnp.linalg.solve(A, rhs.T).T
@@ -38,23 +38,23 @@ def _compute_1D_spline_coeffs_k2(x, Y):
         A_reg = A + 1e-12 * jnp.eye(n_intervals)
         c = jnp.linalg.solve(A_reg, rhs.T).T
     
-    b = jnp.hstack(( (Y[:, 1:] - Y[:, :-1])/h - c*h/3., jnp.zeros((K, 1)) ))
+    b = jnp.hstack(( (Y[1:].T - Y[:-1].T)/h - c*h/3., jnp.zeros((K, 1)) ))
     b = b.at[:, 1:].add(c*h/6.)
     
-    coeffs = jnp.stack([Y[:, :-1], b[:, :-1], c/2], axis=2)
+    coeffs = jnp.stack([Y[:-1].T, b[:, :-1], c/2], axis=2)
     return coeffs
 
 
 
 @jax.jit
 def _compute_1D_spline_coeffs_k3(x, Y):
-    K, M = Y.shape
+    M, K = Y.shape
     h = jnp.diff(x)
     h_inv = 1.0 / h
 
     if M == 2:
-        a = Y[:, 0:1]
-        b = (Y[:, 1:2] - Y[:, 0:1]) *h_inv[0]
+        a = Y[0:1]
+        b = (Y[1:2] - Y[0:1]) *h_inv[0]
         c = jnp.zeros((K, 1))
         d = jnp.zeros((K, 1))
         coeffs = jnp.stack([a, b, c, d], axis=2)
@@ -71,9 +71,9 @@ def _compute_1D_spline_coeffs_k3(x, Y):
     
     A = A.at[M-1, M-3:M].set([ -h[M-2], h[M-3] + h[M-2], -h[M-3], ])
     
-    dy = Y[:, 1:] - Y[:, :-1]
-    term1 = dy[:, 1:] *h_inv[1:]
-    term2 = dy[:, :-1] *h_inv[:-1]
+    dy = Y[1:] - Y[:-1]
+    term1 = dy[1:].T *h_inv[1:]
+    term2 = dy[:-1].T *h_inv[:-1]
     rhs = jnp.zeros((K, M))
     rhs = rhs.at[:, 1:M-1].set( 6 *(term1 - term2) )
     
@@ -83,8 +83,8 @@ def _compute_1D_spline_coeffs_k3(x, Y):
         A_reg = A + 1e-12 * jnp.eye(M)
         z_vals = jnp.linalg.solve(A_reg, rhs.T).T
     
-    a_coeff = Y[:, :-1]
-    b_coeff = dy *h_inv - (h * (2 * z_vals[:, :-1] + z_vals[:, 1:])) / 6
+    a_coeff = Y[:-1].T
+    b_coeff = dy.T *h_inv - (h * (2 * z_vals[:, :-1] + z_vals[:, 1:])) / 6
     c_coeff = z_vals[:, :-1] / 2
     d_coeff = (z_vals[:, 1:] - z_vals[:, :-1]) / (6 * h)
     
@@ -112,9 +112,9 @@ def _evaluate_1D_spline(k, x, coeffs, xq):
 
 class RectBivariateSpline:
     def __init__(self, x, y, z, kx=3, ky=3):
-        self.x_orig = jnp.asarray(x)
-        self.y_orig = jnp.asarray(y)
-        self.z_orig = jnp.asarray(z).T
+        self.x_orig = jnp.atleast_1d(x)
+        self.y_orig = jnp.atleast_1d(y)
+        self.z_orig = jnp.atleast_2d(z)
         self.kx = kx
         self.ky = ky
         
@@ -122,9 +122,6 @@ class RectBivariateSpline:
 
     
     def _compute_1D_spline_coeffs(self, k, x, Y):
-        x = jnp.asarray(x)
-        Y = jnp.atleast_2d(Y)
-        
         if k == 1:
             return _compute_1D_spline_coeffs_k1(x, Y)
         elif k == 2:
@@ -139,11 +136,10 @@ class RectBivariateSpline:
         
 
     def __call__(self, xq, yq, grid=True, ):
+        xq = jnp.atleast_1d(xq)
+        yq = jnp.atleast_1d(yq)
         if grid:
             xq, yq = jnp.meshgrid(xq, yq, indexing='ij')
-        else:
-            xq = jnp.asarray(xq)
-            yq = jnp.asarray(yq)
         
         orig_shape = xq.shape
         xq, yq = xq.flatten(), yq.flatten()
@@ -158,7 +154,7 @@ class RectBivariateSpline:
             lambda i: self.coeffs_x[i][idx_x, 0] +  \
                 jnp.sum( self.coeffs_x[i][idx_x, 1:self.kx+1] *dx_pows[:self.kx].T ,axis=1)
         )( jnp.arange(len(self.y_orig)) )
-        A = jnp.array(A).T
+        A = jnp.array(A)
         
         coeffs_y = self._compute_1D_spline_coeffs(self.ky, self.y_orig, A)
         
@@ -172,3 +168,4 @@ class RectBivariateSpline:
                 )(jnp.arange(n_queries))
 
         return result_flat.reshape(orig_shape)
+

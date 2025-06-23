@@ -7,7 +7,6 @@ from .jax_interpolate import RectBivariateSpline
 
 import jax
 from jax import numpy as jnp
-#from jax.scipy.interpolate import RegularGridInterpolator
 jax.config.update("jax_enable_x64", True)
 
 warnings.simplefilter('always', UserWarning)
@@ -307,6 +306,10 @@ class Emulator(BaseEmulator_GP):
     
 
     
+    ## -----------------------------------------------------------------------------
+    ## differentiation methods
+    ## -----------------------------------------------------------------------------
+    
     def Pk_ij( self, 
             Omega_b = None, 
             Omega_m = None, 
@@ -318,7 +321,7 @@ class Emulator(BaseEmulator_GP):
             M_nu = None, 
     ):
         '''
-        wrapper function for the __call__ method to accept the parameters separately 
+        wrapper function for the `self.__call__` method to accept the parameters separately 
         '''
         return self.__call__( jnp.array([
             Omega_b, Omega_m, h, n_s, As1e9, w_0, w_a, M_nu,
@@ -326,7 +329,7 @@ class Emulator(BaseEmulator_GP):
     
 
     def set_derivative(self, 
-            pre_fun : bool = False, 
+            pre_fun : bool = True, 
         ):
         '''
         Set the derivative functions for the power spectrum with respect to the cosmological parameters.
@@ -334,14 +337,14 @@ class Emulator(BaseEmulator_GP):
         pre_fun : bool, default is False
             If True, pre-compile the derivative functions.
         '''
-        self._func_deri1 = [ jax.jacfwd(self.Pk_ij, argnums=(i) )
+        self.__func_deri1 = [ jax.jacfwd(self.Pk_ij, argnums=(i) )
                         for i in range(8) ]
-        self._func_deri2 = [ [ None for j in range(8) ] for i in range(8) ]
+        self.__func_deri2 = [ [ None for j in range(8) ] for i in range(8) ]
         for i in range(8):
             for j in range(i, 8):
-                self._func_deri2[i][j] = jax.jacfwd( self._func_deri1[i], argnums=(j) )
+                self.__func_deri2[i][j] = jax.jacfwd( self.__func_deri1[i], argnums=(j) )
         if pre_fun :
-            p0 = 0.5*(self.ParamRange_LO + self.ParamRange_HI)
+            p0 = 0.5*(self.ParamRange_LO + self.ParamRange_UP)
             self.Pk_ij_Dparam(*p0, Iparam=0)
             self.Pk_ij_DparamDparam(*p0, Iparam1=0, Iparam2=0, )
         
@@ -367,7 +370,7 @@ class Emulator(BaseEmulator_GP):
             The index of the parameter to take the derivative with respect to.
         ----------
         '''
-        return self._func_deri1[Iparam]( 
+        return self.__func_deri1[Iparam]( 
             Omega_b, Omega_m, h, n_s, As1e9, w_0, w_a, M_nu,
         )
     
@@ -396,15 +399,91 @@ class Emulator(BaseEmulator_GP):
         '''
         if Iparam1 > Iparam2 :
             Iparam1, Iparam2 = Iparam2, Iparam1
-        return self._func_deri2[Iparam1][Iparam2]( 
+        return self.__func_deri2[Iparam1][Iparam2]( 
             Omega_b, Omega_m, h, n_s, As1e9, w_0, w_a, M_nu,
         )
     
-
-
-
+    
+    
+    def Pk_ij_FiniteDiff_Dparam(self, 
+            Omega_b = None, 
+            Omega_m = None, 
+            h = None, 
+            n_s= None, 
+            As1e9 = None, 
+            w_0 = None,
+            w_a= None, 
+            M_nu = None, 
+            Iparam : int = None, 
+            eps = 0.01
+        ):
+        '''
+        Finite difference implementation for method `self.Pk_ij_Dparam`
+        only for check
+        '''
+        Param = jnp.array([
+            Omega_b, Omega_m, h, n_s, As1e9, w_0, w_a, M_nu,
+        ])
+        Param_i1 = Param.at[Iparam].multiply(1 + eps)
+        Param_i2 = Param.at[Iparam].multiply(1 + 2*eps)
+        Param_j1 = Param.at[Iparam].multiply(1 - eps)
+        Param_j2 = Param.at[Iparam].multiply(1 - 2*eps)
+        pk_i1 = self.__call__( Param_i1, )
+        pk_i2 = self.__call__( Param_i2, )
+        pk_j1 = self.__call__( Param_j1, )
+        pk_j2 = self.__call__( Param_j2, )
+        pk_deri = ( -pk_i2 + 8*pk_i1 - 8*pk_j1 + pk_j2 ) / (12*eps*Param[Iparam])
+        return pk_deri 
     
 
+    def Pk_ij_FiniteDiff_DparamDparam(self, 
+            Omega_b = None, 
+            Omega_m = None, 
+            h = None, 
+            n_s= None, 
+            As1e9 = None, 
+            w_0 = None,
+            w_a= None, 
+            M_nu = None, 
+            Iparam1 : int = None, 
+            Iparam2 : int = None, 
+            eps = 0.01
+        ):
+        '''
+        Finite difference implementation for method `self.Pk_ij_DparamDparam`
+        only for check
+        '''
+        Param = jnp.array([
+            Omega_b, Omega_m, h, n_s, As1e9, w_0, w_a, M_nu,
+        ])
+        if Iparam2 is None or Iparam1==Iparam2 :
+            ## 4-th order accurate
+            Param_i1 = Param.at[Iparam1].multiply(1 + eps)
+            Param_i2 = Param.at[Iparam1].multiply(1 + 2*eps)
+            Param_j1 = Param.at[Iparam1].multiply(1 - eps)
+            Param_j2 = Param.at[Iparam1].multiply(1 - 2*eps)
+            pk_i1 = self.__call__( Param_i1, )
+            pk_i2 = self.__call__( Param_i2, )
+            pk_j1 = self.__call__( Param_j1, )
+            pk_j2 = self.__call__( Param_j2, )
+            pk_i0 = self.__call__( Param, )
+            pk_deri = ( -pk_i2 + 16*pk_i1 - 30*pk_i0 + 16*pk_j1 - pk_j2 ) / (12*eps*eps*Param[Iparam1]*Param[Iparam1])
+        else:
+            if Iparam1 > Iparam2 :
+                Iparam1, Iparam2 = Iparam2, Iparam1
+            ## second order accurate ; formula with 4-th accuracy is too long ... ... 
+            Param_i1 = Param.at[Iparam1].multiply(1 + eps).at[Iparam2].multiply(1 + eps)
+            Param_i2 = Param.at[Iparam1].multiply(1 + eps).at[Iparam2].multiply(1 - eps)
+            Param_j1 = Param.at[Iparam1].multiply(1 - eps).at[Iparam2].multiply(1 + eps)
+            Param_j2 = Param.at[Iparam1].multiply(1 - eps).at[Iparam2].multiply(1 - eps)
+            pk_i1 = self.__call__( Param_i1, )
+            pk_i2 = self.__call__( Param_i2, )
+            pk_j1 = self.__call__( Param_j1, )
+            pk_j2 = self.__call__( Param_j2, )
+            pk_deri = ( pk_i1 - pk_i2 - pk_j1 + pk_j2 ) / (4*eps*eps*Param[Iparam1]*Param[Iparam2])
+        return pk_deri
+        
+    
 
     
     def __repr__(self, ):
