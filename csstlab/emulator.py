@@ -33,7 +33,7 @@ class Emulator(BaseEmulator_GP):
     --------------------------------
     '''
     def __init__(self, remake=False, ):
-        '''
+        r'''
         remake : bool, default is False
             If True, re-calculate the ratio for the simulation emulator, 
             and re-calculate the principal components decomposition and the Gaussian Process training for the loop-result emulator
@@ -129,7 +129,7 @@ class Emulator(BaseEmulator_GP):
 
 
     def __to_k_mask(self, k_array = None, z_array=None, ):
-        '''
+        r'''
         In the ouput results, we mask the low-k comonpents of `P_{1\delta^3}` and `P_{\delta\delta^3}`, where there are almost noise in this region. 
         '''
         if k_array is None : k_array = self.__k
@@ -148,7 +148,7 @@ class Emulator(BaseEmulator_GP):
     
 
     def __set_intepolation(self, ):
-        '''
+        r'''
         set the connection between linear-scale 1-loop Pk and the non-linear-scale simulation Pk
         '''
         ## 
@@ -183,7 +183,7 @@ class Emulator(BaseEmulator_GP):
 
 
     def set_k_and_z(self, k, z):
-        '''
+        r'''
         Set the k-bin and z-bin for the interpolation. 
         ----------
         k, z : 1D arrays or scalar
@@ -217,7 +217,7 @@ class Emulator(BaseEmulator_GP):
 
     
     def unset_k_and_z(self, ):
-        '''
+        r'''
         Recover to the default k-bin and z-bin. Not interpolation for the output spectra. 
         '''
         self.__has_set_k_and_z = False
@@ -248,7 +248,7 @@ class Emulator(BaseEmulator_GP):
     
 
     def release__Mask(self, ) :
-        '''
+        r'''
         This function release the k-region mask which set the unreliable k-region as zeros.
         The calling of `set_k_and_z` and `unset_k_and_z` will reset the mask.
         '''
@@ -257,7 +257,7 @@ class Emulator(BaseEmulator_GP):
 
     
     def __call__(self, Param, ):
-        '''
+        r'''
         Array of Cosmological parameters 
             ( Omega_b, Omega_m, h, n_s, 10^9 As, w0, w_a, M_nu, )
         
@@ -290,6 +290,113 @@ class Emulator(BaseEmulator_GP):
             pk_D = [ pk_D[:, i, j] for (i, j) in self._index ]
             return  pk_D *self.__Mask_k
     
+
+
+    
+
+    ## -----------------------------------------------------------------------------
+    ## differentiation methods
+    ## -----------------------------------------------------------------------------
+    
+    def Pk_ij( self, 
+            Omega_b = None, 
+            Omega_m = None, 
+            h = None, 
+            n_s= None, 
+            As1e9 = None, 
+            w_0 = None, 
+            w_a= None, 
+            M_nu = None, 
+    ):
+        r'''
+        wrapper function for the `self.__call__` method to accept the parameters separately 
+        '''
+        return self.__call__( np.array([
+            Omega_b, Omega_m, h, n_s, As1e9, w_0, w_a, M_nu,
+        ]) )
+    
+    
+    def Pk_ij_FiniteDiff_Dparam(self, 
+            Omega_b = None, 
+            Omega_m = None, 
+            h = None, 
+            n_s= None, 
+            As1e9 = None, 
+            w_0 = None,
+            w_a= None, 
+            M_nu = None, 
+            Iparam : int = None, 
+            eps = 0.05
+        ):
+        r'''
+        Finite difference implementation of the 1-st derivative of the power spectrum with respect to the cosmological parameters.
+        '''
+        Param = np.array([
+            Omega_b, Omega_m, h, n_s, As1e9, w_0, w_a, M_nu,
+        ])
+        ones = np.ones_like(Param) 
+        ones[Iparam] = 1 + eps
+        pk_i1 = self.__call__( Param *ones, )
+        ones[Iparam] = 1 + 2*eps
+        pk_i2 = self.__call__( Param *ones, )
+        ones[Iparam] = 1 - eps
+        pk_j1 = self.__call__( Param *ones, )
+        ones[Iparam] = 1 - 2*eps
+        pk_j2 = self.__call__( Param *ones, )
+        pk_deri = ( -pk_i2 + 8*pk_i1 - 8*pk_j1 + pk_j2 ) / (12*eps*Param[Iparam])
+        return pk_deri 
+    
+
+    def Pk_ij_FiniteDiff_DparamDparam(self, 
+            Omega_b = None, 
+            Omega_m = None, 
+            h = None, 
+            n_s= None, 
+            As1e9 = None, 
+            w_0 = None,
+            w_a= None, 
+            M_nu = None, 
+            Iparam1 : int = None, 
+            Iparam2 : int = None, 
+            eps = 0.05
+        ):
+        r'''
+        Finite difference implementation of 2-nd derivative of the power spectrum with respect to the cosmological parameters.
+        '''
+        Param = np.array([
+            Omega_b, Omega_m, h, n_s, As1e9, w_0, w_a, M_nu,
+        ])
+        if Iparam2 is None or Iparam1==Iparam2 :
+            ## 4-th order accurate 
+            ones = np.ones_like(Param)
+            ones[Iparam1] = 1 + eps
+            pk_i1 = self.__call__( Param *ones, )
+            ones[Iparam1] = 1 + 2*eps
+            pk_i2 = self.__call__( Param *ones, )
+            ones[Iparam1] = 1 - eps
+            pk_j1 = self.__call__( Param *ones, )
+            ones[Iparam1] = 1 - 2*eps
+            pk_j2 = self.__call__( Param *ones, )
+            pk_i0 = self.__call__( Param, )
+            pk_deri = ( -pk_i2 + 16*pk_i1 - 30*pk_i0 + 16*pk_j1 - pk_j2 ) / (12*eps*eps*Param[Iparam1]*Param[Iparam1])
+        else:
+            if Iparam1 > Iparam2 :
+                Iparam1, Iparam2 = Iparam2, Iparam1
+            ## second order accurate ; formula with 4-th accuracy is too long ... ... 
+            ones = np.ones_like(Param)
+            ones[Iparam1] = 1 + eps ; ones[Iparam2] = 1 + eps
+            pk_i1 = self.__call__( Param *ones, )
+            ones[Iparam1] = 1 + eps ; ones[Iparam2] = 1 - eps
+            pk_i2 = self.__call__( Param *ones, )
+            ones[Iparam1] = 1 - eps ; ones[Iparam2] = 1 + eps
+            pk_j1 = self.__call__( Param *ones, )
+            ones[Iparam1] = 1 - eps ; ones[Iparam2] = 1 - eps
+            pk_j2 = self.__call__( Param *ones, )
+            pk_deri = ( pk_i1 - pk_i2 - pk_j1 + pk_j2 ) / (4*eps*eps*Param[Iparam1]*Param[Iparam2])
+        return pk_deri
+    
+    
+
 
 
     

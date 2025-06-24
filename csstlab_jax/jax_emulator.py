@@ -134,7 +134,7 @@ class Emulator(BaseEmulator_GP):
 
 
     def __to_k_mask(self, k_array = None, z_array=None, ):
-        '''
+        r'''
         In the ouput results, we mask the low-k comonpents of `P_{1\delta^3}` and `P_{\delta\delta^3}`, where there are almost noise in this region. 
         '''
         if k_array is None : k_array = self.__k
@@ -154,7 +154,7 @@ class Emulator(BaseEmulator_GP):
     
 
     def __set_intepolation(self, ):
-        '''
+        r'''
         set the connection between linear-scale 1-loop Pk and the non-linear-scale simulation Pk
         '''
         ## 
@@ -189,7 +189,7 @@ class Emulator(BaseEmulator_GP):
 
 
     def set_k_and_z(self, k, z):
-        '''
+        r'''
         Set the k-bin and z-bin for the interpolation. 
         ----------
         k, z : 1D arrays or scalar
@@ -256,7 +256,7 @@ class Emulator(BaseEmulator_GP):
     
 
     def release__Mask(self, ) :
-        '''
+        r'''
         This function release the k-region mask which set the unreliable k-region as zeros.
         The calling of `set_k_and_z` and `unset_k_and_z` will reset the mask.
         '''
@@ -265,7 +265,7 @@ class Emulator(BaseEmulator_GP):
 
     
     def __call__(self, Param, ):
-        '''
+        r'''
         Array of Cosmological parameters 
             ( Omega_b, Omega_m, h, n_s, 10^9 As, w_0, w_a, M_nu, )
         
@@ -293,7 +293,7 @@ class Emulator(BaseEmulator_GP):
                     self.__z[::-1], self.__k_stack[i][j], data_pk[::-1],   ## `z` axis should be descending
                     kx=3, ky=3,  
                 )(  self.__set_z, self.__set_k, grid=True,  )[self.__intp_zsort]
-                '''
+                r'''
                 self.__set_pkij[l] = \
                 RegularGridInterpolator(
                     (self.__z[::-1], self.__k_stack[i][j]), data_pk[::-1],   ## `z` axis should be descending
@@ -320,7 +320,7 @@ class Emulator(BaseEmulator_GP):
             w_a= None, 
             M_nu = None, 
     ):
-        '''
+        r'''
         wrapper function for the `self.__call__` method to accept the parameters separately 
         '''
         return self.__call__( jnp.array([
@@ -331,7 +331,7 @@ class Emulator(BaseEmulator_GP):
     def set_derivative(self, 
             pre_fun : bool = True, 
         ):
-        '''
+        r'''
         Set the derivative functions for the power spectrum with respect to the cosmological parameters.
         
         pre_fun : bool, default is False
@@ -360,7 +360,7 @@ class Emulator(BaseEmulator_GP):
             M_nu = None, 
             Iparam : int = None, 
         ):
-        '''
+        r'''
         Derivative of the power spectrum with respect to the cosmological parameters.
         Parameters
         ----------
@@ -387,7 +387,7 @@ class Emulator(BaseEmulator_GP):
             Iparam1 : int = None, 
             Iparam2 : int = None, 
         ):
-        '''
+        r'''
         Second order derivative of the power spectrum with respect to the cosmological parameters.
         Parameters
         ----------
@@ -415,9 +415,9 @@ class Emulator(BaseEmulator_GP):
             w_a= None, 
             M_nu = None, 
             Iparam : int = None, 
-            eps = 0.01
+            eps = 0.05, 
         ):
-        '''
+        r'''
         Finite difference implementation for method `self.Pk_ij_Dparam`
         only for check
         '''
@@ -447,9 +447,9 @@ class Emulator(BaseEmulator_GP):
             M_nu = None, 
             Iparam1 : int = None, 
             Iparam2 : int = None, 
-            eps = 0.01
+            eps = 0.05, 
         ):
-        '''
+        r'''
         Finite difference implementation for method `self.Pk_ij_DparamDparam`
         only for check
         '''
@@ -482,7 +482,7 @@ class Emulator(BaseEmulator_GP):
             pk_j2 = self.__call__( Param_j2, )
             pk_deri = ( pk_i1 - pk_i2 - pk_j1 + pk_j2 ) / (4*eps*eps*Param[Iparam1]*Param[Iparam2])
         return pk_deri
-        
+    
     
 
     
@@ -595,3 +595,5 @@ class EFTofLSS_Model:
             gridP_auto[2] += 2*b_3 *pks[17]
             gridP_auto[3] += 2*b_3 *pks[19]
         return gridP_auto, gridP_cross
+
+
