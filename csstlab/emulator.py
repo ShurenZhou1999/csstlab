@@ -1,9 +1,10 @@
 import sys, os, warnings
 import numpy as np
-from scipy.interpolate import RectBivariateSpline
+from scipy.interpolate import RectBivariateSpline, RegularGridInterpolator
 from .base import BaseEmulator_GP
 from .emu_simu import Emulator_simu
 from .emu_loop import Emulator_loop
+from .emu_error import estimate_emulation_error
 
 warnings.simplefilter('always', UserWarning)
 warnings.formatwarning = \
@@ -52,10 +53,11 @@ class Emulator(BaseEmulator_GP):
         self.EmuLoop = Emulator_loop(kmax=self.__kmax, opt_PCs = 1, )
         self.EmuLin  = Emulator_loop(kmax=self.__kmax_lin, opt_PCs = 2, )   # linear scale of 1-loop power spectrum
         self.__set_emulators(remake=remake)
-        
+
         self.__has_set_k_and_z = False
         self.__to_k_mask()
         self.__set_intepolation()
+        self.__set_emulationError()
 
 
     def __set_emulators(self, remake=False, ):
@@ -128,23 +130,55 @@ class Emulator(BaseEmulator_GP):
     
 
 
+    def __set_emulationError(self, ):
+        '''
+        the estimated error of the basis spectra. 
+        Given shape as : 
+            (z,  i, j, m, n,  k_1, k_2)
+        '''
+        self.__emuErr_stat, self.__emuErr_syst = estimate_emulation_error(self.__PathData)
+
+        elements = [ ]
+        for i in range(6):
+            for j in range(i+1):
+                for m in range(6):
+                    for n in range(m+1):
+                        elements.append( 
+                            tuple(sorted([
+                                tuple(sorted([i, j])), 
+                                tuple(sorted([m, n])), 
+                            ]) )
+                        )
+        self.__ee_ij = set(elements)
+
+        for ee in [self.__emuErr_stat, self.__emuErr_syst, ]:
+            for (i, j, kInd) in self.__index_stack:
+                ee[:, i, j, ..., :kInd, :] = 0.0
+                ee[:, j, i, ..., :kInd, :] = 0.0
+                ee[:, ..., i, j, :, :kInd] = 0.0
+                ee[:, ..., j, i, :, :kInd] = 0.0
+        
+
+
+
     def __to_k_mask(self, k_array = None, z_array=None, ):
         r'''
         In the ouput results, we mask the low-k comonpents of `P_{1\delta^3}` and `P_{\delta\delta^3}`, where there are almost noise in this region. 
         '''
         if k_array is None : k_array = self.__k
         if z_array is None : z_array = self.__z
-        self.__Mask_k = np.ones(( 21, len(z_array), len(k_array), ), dtype='int32', )
+        self.__Mask_k = np.ones(( len(z_array), 6, 6, len(k_array), ), dtype='int32', )
+        for (i, j, kmax) in [
+            (0, 5, 0.35), # (0, 5),   The theory and simulation result are inconsistent in all region. 
+            (1, 5, 0.20), # (1, 5), 
+            (4, 4, 0.0015), # (4, 4), 
+        ]:
+            self.__Mask_k[:, i, j][..., k_array<kmax ] = 0
+            self.__Mask_k[:, j, i] = self.__Mask_k[:, i, j]
         ## Given single redshift, return 1-D array instead of 2-D array
         ## see inner function :: self.set_k_and_z
         if len(z_array)==1 :
-            self.__Mask_k = np.squeeze(self.__Mask_k, axis=1)
-        for (l, kmax) in [
-            ( 5, 0.35), # (0, 5),   The theory and simulation result are inconsistent in all region. 
-            (10, 0.20), # (1, 5), 
-            (18, 0.0015), # (4, 4), 
-        ]:
-            self.__Mask_k[l][..., k_array<kmax ] = 0
+            self.__Mask_k = np.squeeze(self.__Mask_k, axis=0)
     
 
     def __set_intepolation(self, ):
@@ -162,25 +196,31 @@ class Emulator(BaseEmulator_GP):
             self.__intp_kdrop[i][j] = [kdrop0, 0, ]
             self.__k_stack[i][j] = k_stack
         
-        for (i, j, kInd) in [ 
-            (0, 2, 4), 
+        self.__index_stack = [
+            (0, 2, 5), 
             (0, 3, 4), 
             (1, 2, 5), 
-            (1, 3, 5), 
-            (2, 4, 4), 
+            (1, 3, 6), 
+            (2, 4, 6), 
             (3, 4, 4), 
             (4, 4, 4), 
             (2, 5, 2), 
             (3, 5, 2), 
 
-            (1, 5, 20), 
+            (0, 5, 29), 
+            (1, 5, 21), 
             (4, 5, 32), 
-        ]: 
+        ]
+        for (i, j, kInd) in self.__index_stack:
             kdrop0 = np.sum( self.__klin < self.__k[kInd] ) - 3
             self.__intp_kdrop[i][j] = [kdrop0, kInd, ]
             self.__k_stack[i][j] = np.hstack([ self.__klin[:kdrop0], self.__k[kInd:], ])
 
 
+
+    def set_k_and_z_default(self, ):
+        self.set_k_and_z( self.__k, self.__z, )
+    
 
     def set_k_and_z(self, k, z):
         r'''
@@ -205,15 +245,20 @@ class Emulator(BaseEmulator_GP):
         if np.any( np.diff(np.sort(z)) <= 0 ):
             raise Warning("The `z` array should be in strictly ascending order")
 
-        if len(z)==1 : self.__intp_zsort = 0       ## Given single redshift, return 1-D array instead of 2-D array
-        else         : self.__intp_zsort = np.argsort(z)     ## The redshift is ordered by `z=0 -> z=3` as the interpolation function requires.
+        if len(z)==1 : 
+            self.__intp_zsort = 0       ## Given single redshift, return 1-D array instead of 2-D array
+            self.__set_Nz = 1
+        else : 
+            self.__intp_zsort = np.argsort(z)     ## The redshift is ordered by `z=0 -> z=3` as the interpolation function requires.
+            self.__set_Nz = len(z)
+        self.__set_Nk = len(k)
         
         self.__has_set_k_and_z = True
         self.__set_k = k
         self.__set_z = z[self.__intp_zsort]
-        self.__to_k_mask(k, z) 
-        self.__set_pkij = np.zeros(( 21, len(z), len(k), ), dtype='float64', )
-        self.__set_pkij = np.squeeze(self.__set_pkij)     ## shape as (21, Nk) if `z` is a scalar
+        self.__to_k_mask(k, z)
+        self.__set_pkij = np.zeros(( len(z), 6, 6, len(k), ), dtype='float64', )
+        self.__set_pkij = np.squeeze(self.__set_pkij)     ## shape as (6, 6, Nk) if `z` is a scalar
 
     
     def unset_k_and_z(self, ):
@@ -244,7 +289,7 @@ class Emulator(BaseEmulator_GP):
         if self.__has_set_k_and_z : 
             return self.__set_z.copy()
         else : 
-            return self.__z.copy()
+            return self.__z[::-1].copy()
     
 
     def release__Mask(self, ) :
@@ -280,20 +325,95 @@ class Emulator(BaseEmulator_GP):
             for l, (i, j) in enumerate(self._index):
                 kdrop0, kdrop1 = self.__intp_kdrop[i][j]
                 data_pk = np.hstack([ pk_lin[:, i, j, :kdrop0], pk_D[:, i, j, kdrop1: ], ])
-                self.__set_pkij[l] = \
+                self.__set_pkij[..., i, j, :] = \
                 RectBivariateSpline(
                     self.__z[::-1], self.__k_stack[i][j], data_pk[::-1],   ## `z` axis should be descending
                     kx=3, ky=3,  
                 )(  self.__set_z, self.__set_k, grid=True,  )[self.__intp_zsort]
+                self.__set_pkij[..., j, i, :] = self.__set_pkij[..., i, j, :]
             return  self.__set_pkij *self.__Mask_k
         else:
-            pk_D = [ pk_D[:, i, j] for (i, j) in self._index ]
+            #pk_D = [ pk_D[:, i, j] for (i, j) in self._index ]
             return  pk_D *self.__Mask_k
     
 
 
     
 
+    ## -----------------------------------------------------------------------------
+    ## emulator error
+    ## -----------------------------------------------------------------------------
+
+
+    def error(self, etype='tot', Param=None, norm=True, ):
+        '''
+        ----------
+        etype : 'tot' | 'syst' | 'stat'
+        Param : cosomological parameters, optional
+        norm  : bool, default is True
+            If True, return the normalized error matrix, $\rho_{ijmn} = Cov_{ijmn} /(P_{ij}P_{mn})$
+            when 'norm=True', `Param` should be given.
+        ----------
+        return the Covariance matrix of the basis spectra error, with shape as
+            (Nz, 6, 6, 6, 6, Nk, Nk)
+        '''
+        if not self.__has_set_k_and_z:
+            self.set_k_and_z_default()
+        
+        if etype == 'tot':
+            ee = self.__emuErr_stat + self.__emuErr_syst
+        elif etype == 'syst':
+            ee = self.__emuErr_syst
+        elif etype == 'stat':
+            ee = self.__emuErr_stat
+        else:
+            raise ValueError(f"Emulator error type `{etype}` is not supported. ")
+        
+        set_kz = np.meshgrid(self.__set_z, self.__set_k, self.__set_k, indexing='ij', )
+        set_kz = np.array([set_kz[0], set_kz[1], set_kz[2], ]).T
+        err_out = np.zeros(( self.__set_Nz, 6, 6, 6, 6, self.__set_Nk, self.__set_Nk, ), dtype='float64', )
+        _k = self.__k.copy()
+        _k[ 0] -= 1e-5
+        _k[-1] += 1e-2
+
+        for [[i, j], [m, n]] in self.__ee_ij:
+            val_interp = RegularGridInterpolator( (self.__z[::-1], _k, _k), values=ee[:, i, j, m, n][::-1],
+                        method="nearest", fill_value=0, bounds_error=False, 
+                   )( set_kz ).T
+            val_interp_T = val_interp.transpose(0, 2, 1) 
+            err_out[:, i, j, m, n] = val_interp
+            if m!=n:
+                err_out[:, i, j, n, m] = val_interp
+            if i!=j:
+                err_out[:, j, i, m, n] = val_interp
+                if m!=n:
+                    err_out[:, j, i, n, m] = val_interp
+            if i!=m or j!=n:
+                err_out[:, m, n, i, j] = val_interp_T
+                if m!=n:
+                    err_out[:, n, m, i, j] = val_interp_T
+                if i!=j:
+                    err_out[:, m, n, j, i] = val_interp_T
+                    if m!=n:
+                        err_out[:, n, m, j, i] = val_interp_T
+        
+        err_out = np.squeeze(err_out)
+        if norm:
+            return err_out
+        elif Param is None:
+            raise ValueError("When `norm=False`, the `Param` should be given to calculate the error matrix. ")
+        
+        Pk_ij = self.__call__(Param)
+        if Pk_ij.ndim==3:
+            return err_out * Pk_ij.reshape(6, 6, 1, 1, -1, 1) * Pk_ij.reshape(1, 1, 6, 6, 1, -1)
+        else:
+            nz = Pk_ij.shape[0]
+            return err_out * Pk_ij.reshape(nz, 6, 6, 1, 1, -1, 1) * Pk_ij.reshape(nz, 1, 1, 6, 6, 1, -1)
+            
+
+    
+
+        
     ## -----------------------------------------------------------------------------
     ## differentiation methods
     ## -----------------------------------------------------------------------------
@@ -416,96 +536,5 @@ class Emulator(BaseEmulator_GP):
             + f"    M_nu     : {0} - {0.3} eV\n" 
     
 
-    @property
-    def EFTofLSS_Model(self,):
-        return EFTofLSS_Model
 
 
-
-
-
-
-
-
-class EFTofLSS_Model:
-    def __init__(self, ):
-        pass
-
-    @staticmethod
-    def CombinePkij( k, pks, 
-                    b_1, b_2, b_s2, b_n2, b_3=None, ):
-        '''
-        combine the Lagrangian basis power spectrum to the biased tracer power spectrum
-        not include the shot noise term in the auto-power spectrum
-        '''
-        P_cross = pks[0] + b_1 *pks[1] + b_2 *pks[2] + b_s2 *pks[3] + b_n2 *pks[4]
-        P_auto =    ( pks[0] + 2*b_1 *pks[1] + 2*b_2 *pks[2] + 2*b_s2 *pks[3] + 2*b_n2 *pks[4] ) + \
-                b_1*(            b_1 *pks[6] + 2*b_2 *pks[7] + 2*b_s2 *pks[8] + 2*b_n2 *pks[9] ) + \
-                b_2*(                            b_2 *pks[11]+ 2*b_s2 *pks[12]+ 2*b_n2 *pks[13]) + \
-                b_s2*(                                           b_s2 *pks[15]+ 2*b_n2 *pks[16]) + \
-                b_n2*(                                                            b_n2 *pks[18]) 
-        if b_3 is not None:
-            P_cross += b_3 * pks[5] 
-            P_auto  += 2* b_3 *( pks[5] + b_1 *pks[10] + b_2 *pks[14] + b_s2 *pks[17] + b_n2 *pks[19] ) \
-                        + b_3*b_3 *pks[20]
-        return P_auto, P_cross
-    
-
-    @staticmethod
-    def CombinePkij_replace_nabla2( k, pks, b_1, b_2, b_s2, b_n2, b_3=None, ):
-        '''
-        same as `CombinePkij`, but replace the $\nabla^2\delta$ with $-k^2\delta$
-        '''
-        b_n2 = - k**2 *b_n2
-        P_cross = pks[0] + b_1 *pks[1] + b_2 *pks[2] + b_s2 *pks[3] + b_n2 *pks[0]
-        P_auto =    ( pks[0] + 2*b_1 *pks[1] + 2*b_2 *pks[2] + 2*b_s2 *pks[3] + 2*b_n2 *pks[0] ) + \
-                b_1*(            b_1 *pks[6] + 2*b_2 *pks[7] + 2*b_s2 *pks[8] + 2*b_n2 *pks[1] ) + \
-                b_2*(                            b_2 *pks[11]+ 2*b_s2 *pks[12]+ 2*b_n2 *pks[2]) + \
-                b_s2*(                                           b_s2 *pks[15]+ 2*b_n2 *pks[3]) + \
-                b_n2*(                                                            b_n2 *pks[0]) 
-        if b_3 is not None:
-            P_cross += b_3 * pks[5] 
-            P_auto  += 2* b_3 *( pks[5] + b_1 *pks[10] + b_2 *pks[14] + b_s2 *pks[17] + b_n2 *pks[5] ) \
-                        + b_3*b_3 *pks[20]
-        return P_auto, P_cross
-    
-    
-    @staticmethod
-    def CombinePkij_plus_1shotnoise( k, pks, shotnoise, biasList, ):
-        alpha, bs = biasList[:1], biasList[1:]
-        pk_hh, pk_hm = EFTofLSS_Model.Pkij_to_biasPk( pks, *bs )
-        pk_hh += alpha[0] *shotnoise
-        return pk_hh, pk_hm
-    
-    
-    @staticmethod
-    def CombinePkij_plus_2shotnoise( k, pks, shotnoise, biasList, ):
-        alpha, bs = biasList[:2], biasList[2:]
-        pk_hh, pk_hm = EFTofLSS_Model.Pkij_to_biasPk( pks, *bs )
-        pk_hh += (alpha[0] + alpha[0]*k**2) *shotnoise
-        return pk_hh, pk_hm
-    
-    
-
-    @staticmethod
-    def CombinePkij_gradient( pks, b_1, b_2, b_s2, b_n2, b_3=None, ):
-        '''
-        Gradient of the biased tracer power spectrum with respect to the bias parameters
-        '''
-        gridP_cross = [ pks[1], pks[2], pks[3], pks[4], ]
-        gridP_auto = [ 
-            2* (pks[1] + b_1 *pks[6] + b_2 *pks[7] + b_s2 *pks[8] + b_n2 *pks[9] ) , 
-            2* (pks[2] + b_1 *pks[7] + b_2 *pks[11]+ b_s2 *pks[12]+ b_n2 *pks[13]) ,
-            2* (pks[3] + b_1 *pks[8] + b_2 *pks[12]+ b_s2 *pks[15]+ b_n2 *pks[16]) ,
-            2* (pks[4] + b_1 *pks[9] + b_2 *pks[13]+ b_s2 *pks[16]+ b_n2 *pks[18]) ,
-        ]
-        if b_3 is not None:
-            gridP_cross.append( pks[5] )
-            gridP_auto.append( 
-                2*( pks[5] + b_1 *pks[10] + b_2 *pks[14] + b_s2 *pks[17] + b_n2 *pks[19] + b_3 *pks[20] )
-            )
-            gridP_auto[0] += 2*b_3 *pks[10]
-            gridP_auto[1] += 2*b_3 *pks[14]
-            gridP_auto[2] += 2*b_3 *pks[17]
-            gridP_auto[3] += 2*b_3 *pks[19]
-        return gridP_auto, gridP_cross

@@ -169,17 +169,18 @@ class Emulator(BaseEmulator_GP):
             self.__k_stack[i][j] = k_stack
         
         for (i, j, kInd) in [ 
-            (0, 2, 4), 
+            (0, 2, 5), 
             (0, 3, 4), 
             (1, 2, 5), 
-            (1, 3, 5), 
-            (2, 4, 4), 
+            (1, 3, 6), 
+            (2, 4, 6), 
             (3, 4, 4), 
             (4, 4, 4), 
             (2, 5, 2), 
             (3, 5, 2), 
 
-            (1, 5, 20), 
+            (0, 5, 29), 
+            (1, 5, 21), 
             (4, 5, 32), 
         ]: 
             kdrop0 = np.sum( self.__klin < self.__k[kInd] ) - 3
@@ -539,7 +540,7 @@ class EFTofLSS_Model:
 
     @staticmethod
     def CombinePkij_replace_nabla2( k, pks, b_1, b_2, b_s2, b_n2, b_3=None, ):
-        '''
+        r'''
         same as `CombinePkij`, but replace the $\nabla^2\delta$ with $-k^2\delta$
         '''
         b_n2 = - k**2 *b_n2

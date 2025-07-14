@@ -82,7 +82,7 @@ class BaseEmulator_GP(ABC):
             path_ij = filename + f"_GPmodel_ij-{i}{j}.npy" 
             if not os.path.exists(path_ij) :
                 raise ValueError( f"The Gaussian Process model file {path_ij} does not exist. ")
-            self.GPs[i][j] = GaussianProcessRegressor( kernel=self.GP_kernel, )
+            self.GPs[i][j] = GaussianProcessRegressor( kernel=self.GP_kernel, alpha=1e-10, normalize_y=True, )
             self.GPs[i][j].load( path_ij )
         
 

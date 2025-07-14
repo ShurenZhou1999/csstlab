@@ -1,6 +1,144 @@
 import sys, os
 import numpy as np
 from scipy.optimize import minimize
+from scipy.interpolate import interpn
+from scipy.signal import savgol_filter
+
+
+class FastPM_Covariance:
+    def __init__(self, PathHalo=None, ):
+        if PathHalo is None:
+            PathHalo = "/Users/zhoushuren/_Projects/_24_HLPT/Data/ExtentHaloPowerSpec/"
+        FastPMPower = np.load( PathHalo + "FastPM_PowerSpectrum.npy", allow_pickle=True, )[()]
+
+        Pk_phaseA = FastPMPower["Pk_phaseA"]
+        Pk_phaseB = FastPMPower["Pk_phaseB"]
+        FPM_k  = FastPMPower["k"]
+        FPM_kmodes  = FastPMPower["Nmodes"]
+        Pk_stack = np.hstack([Pk_phaseA, Pk_phaseB])
+        
+        ## 
+        ## merge 6 bins into 1 bin to reduce the noise
+        ## 
+        Nz = 12
+        Nsamples = 50
+        kend = 475      # make sure it matched with `nbin`
+        nbin = 6
+        modes_wei = np.sum(FPM_kmodes[1:kend].reshape(-1, nbin), axis=-1, )
+        Pk_wei = Pk_stack[:, :, 1:kend] *FPM_kmodes[1:kend]
+        k_wei  = FPM_k[1:kend] *FPM_kmodes[1:kend]
+
+        Pk_wei = np.sum( Pk_wei.reshape(Nz, Nsamples, -1, nbin), axis=-1, ) / modes_wei 
+        k_wei  = np.sum( k_wei .reshape(-1, nbin), axis=-1, ) / modes_wei
+        
+        ## 
+        ## smooth the cross-coefficients
+        ## 
+
+        Nk = k_wei.shape[0]
+        CorrMat_raw = np.zeros((Nz, Nk, Nk, ))
+        CorrMat_smo = np.zeros((Nz, Nk, Nk, ))
+
+        for IndexZ  in range(Nz):
+            CovMat = np.cov( Pk_wei[IndexZ].T )
+            CovMat[ CovMat<0 ] = 0
+            CovDiag = CovMat.diagonal()
+            mat_ccc = CovMat /np.sqrt(CovDiag.reshape(-1, 1) *CovDiag.reshape(1, -1) )
+
+            iarr = np.arange( Nk )
+            smat_ccc = mat_ccc.copy()
+            smat_ccc[iarr[1:], iarr[1:]] = np.diag(smat_ccc, k=-1)
+            smat_ccc[0, 0] = smat_ccc[0, 1]
+            for iax in [0, 1, ]:
+                smat_ccc = savgol_filter(smat_ccc, window_length = 13 , polyorder=1, axis=iax )
+
+            CorrMat_raw[IndexZ] =  mat_ccc
+            CorrMat_smo[IndexZ] = smat_ccc
+        
+        self.CorrMat_raw = CorrMat_raw
+        self.CorrMat     = CorrMat_smo
+        self.k_wei  = k_wei
+        self.Pk_wei = Pk_wei
+        self.__list_mat_r2 = None
+        
+    
+    
+    def fit(self, IndexZ, k, ):
+        '''
+        Parameters
+        ----------
+        IndexZ : int, [0, 12).
+        k : Nd-array
+        
+        return 
+        ------
+        The matter power spectrum cross-coefficient at given k bins. 
+        '''
+            
+        smat_ccc = self.CorrMat[IndexZ]
+        nk = k.shape[0]
+        
+        mat_fit = interpn( 
+            (self.k_wei, self.k_wei), 
+            smat_ccc ,
+            np.array( np.meshgrid(k, k, indexing="ij", ) ).reshape(2, -1).T, 
+            method='nearest', 
+            bounds_error=False, 
+            fill_value = None, 
+        ).reshape(nk, nk)
+        
+        mat_fit[ mat_fit<0 ] = 0
+        iarr = np.arange(nk)
+        mat_fit[iarr, iarr] = 1
+        
+        return mat_fit**2
+    
+    
+    def set_k(self, k, ):
+        self.__list_mat_r2 = [ self.fit(IndexZ, k) for IndexZ in range(12) ]
+        self.Idiag = np.arange(k.shape[0])
+    
+    
+    def __call__(self, IndexZ, 
+                 k, pk_hh, pk_hm, pk_mm, shot, Nk):
+        '''
+        return Covariance for vector [P_hh, P_hm]. 
+        The diagonal part is given by Gaussian covariance, 
+            [ 2 * P_hh^2    , 2 * P_hh*P_mh   ]
+            [ 2 * P_hh*P_hm , P_hh*P_mm + P_hm^2 ]
+        The off-diagonal part is re-scaled by the FastPM matter power spectrum cross-coefficients, where the shot noise is not cosidered.
+        Note that the number of k-cells is not divided in the output covariance. 
+        '''
+        if self.__list_mat_r2 is None:
+            mat_r2 = self.fit(IndexZ, k)
+            iarr = np.arange(k.shape[0])
+        else:
+            mat_r2 = self.__list_mat_r2[IndexZ]
+            iarr = self.Idiag
+        ## TEST ##
+        ##mat_r2 = np.eye(k.shape[0])
+        ##########
+        pk_hh_s = pk_hh - shot
+        if np.any(pk_hh_s<0):
+            ival = pk_hh_s.min()
+            pk_hh_s -= ival
+            shot += ival
+        hhhh = mat_r2 *pk_hh_s.reshape(-1, 1) *pk_hh_s.reshape(1, -1)
+        hhhm = mat_r2 *pk_hh_s.reshape(-1, 1) *pk_hm.reshape(1, -1)
+        hhmm = mat_r2 *pk_hh_s.reshape(-1, 1) *pk_mm.reshape(1, -1)
+        hmhm = mat_r2 *pk_hm.reshape(-1, 1) *pk_hm.reshape(1, -1)
+        
+        hhhh[iarr, iarr] += 2*pk_hh_s*shot + shot**2 
+        hhhm[iarr, iarr] += pk_hm*shot 
+        hhmm[iarr, iarr] += pk_mm*shot 
+        Nk_stack = np.hstack([ Nk, Nk, ])
+
+        return np.vstack([
+                np.hstack([ 2*hhhh , 2*hhhm.T   , ]), 
+                np.hstack([ 2*hhhm , hhmm + hmhm, ]), 
+            ]) /np.sqrt( Nk_stack.reshape(-1, 1) *Nk_stack.reshape(1, -1) )
+
+
 
 
 ## 
@@ -46,6 +184,7 @@ class HaloPowerSpec:
         dk = kedges[1:] - kedges[:-1]
         Nk_cells = 4*np.pi *dk *k**2 /dV_k /2.
         
+        self.fpm_cov = FastPM_Covariance()      ##########
         self.HaloPower = HaloPower
         self.__params = AllParams
         self.V = L**3
@@ -54,6 +193,7 @@ class HaloPowerSpec:
         self.Nk_cells = Nk_cells
         self.tag = None
         self.IndexK = None
+        self.__f_cov = 1
     
     def set_kmax(self, IndexK):
         self.IndexK = IndexK
@@ -80,7 +220,16 @@ class HaloPowerSpec:
         if IndexMass is None : return nhalo
         return nhalo[IndexMass]
     
+     
+    def set_cov(self, opt="fpm", ):
+        if opt == "fpm":
+            self.__f_cov = 1
+        elif opt == "gaussian":
+            self.__f_cov = 2
+        else:
+            raise ValueError("Unknown covariance option: %s"%opt)
     
+
     def __call__(self, icosmo, z, mass, ):
         HaloPower = self.HaloPower
         tag = self.__cosmoTag(icosmo)
@@ -91,8 +240,12 @@ class HaloPowerSpec:
         pk_hh = HaloPower[tag]["Pk_hh"][z, mass, :kmax]
         pk_hm = HaloPower[tag]["Pk_hm"][z, mass, :kmax]
         pk_mm = HaloPower[tag]["Pk_mm"][z, :kmax]
-        ##cov = self.fpm_cov(z, karr, pk_hh, pk_hm, pk_mm, pk_shot, )
-        cov = GaussianCovariance( pk_hh, pk_hm, pk_mm, self.Nk_set, )
+        if self.__f_cov==1:
+            cov = self.fpm_cov(z, karr, pk_hh, pk_hm, pk_mm, pk_shot, self.Nk_set )        #################
+        elif self.__f_cov==2:
+            cov = GaussianCovariance( pk_hh, pk_hm, pk_mm, self.Nk_set, )
+        else:
+            raise ValueError("Unknown covariance option: %s"%self.__f_cov)
 
         return karr, pk_hh, pk_hm, pk_shot, cov,
 
@@ -114,8 +267,9 @@ class LossFunction:
 
         vals, vecs = np.linalg.eigh(_Cov_hhhm)
         vals_inv = 1/vals
-        vals_inv[ vals < vals.max()*1e-15 ] = 0      ## also remove negative eigenvalues
+        vals_inv[ vals < vals.max()*1e-10 ] = 0      ## also remove negative eigenvalues
         cov_inv = vecs @ np.diag(vals_inv) @ vecs.T 
+        self._Cov     = _Cov_hhhm
         self._Cov_inv = cov_inv
         #self._Cov_inv = np.linalg.pinv(_Cov_hhhm, rcond=1e-5 )
 
@@ -174,7 +328,7 @@ class LossFunction:
             bias = [alpha0, (alpha1), b1, b2, bs2 , bn2, b3, ]
         '''
         alpha, bs = bias[:self.__alphas], bias[self.__alphas:]
-        pk_auto, pk_cross = self.sum_Pkij( self._k, self._Pkij_list, *bs )
+        pk_auto, pk_cross = self.sum_Pkij( self._k, self._Pkij_list, bs )
         pk_auto += alpha[0] *self._Pk_shot  # shot noise
         if self.__auto_has_ksq_shotnoise:
             pk_auto += alpha[1] *self._k**self.__klaw *self._Pk_shot
@@ -195,9 +349,9 @@ class LossFunction:
         loss function gradient
         '''
         alpha, bs = bias[:self.__alphas], bias[self.__alphas:]
-        pk_auto, pk_cross = self.sum_Pkij( self._k, self._Pkij_list, *bs )
+        pk_auto, pk_cross = self.sum_Pkij( self._k, self._Pkij_list, bs )
         pk_delta = self._biasPk - np.hstack([pk_auto, pk_cross,])
-        dfdb_auto, dfdb_cross = self.sum_Pkij_D( self._Pkij_list, *bs )
+        dfdb_auto, dfdb_cross = self.sum_Pkij_D( self._Pkij_list, bs )
         temp_ = self._Cov_inv @ pk_delta
         dloss = [ self._Pk_shot *self.one_zeros @temp_ ]
         if self.__alphas == 2:

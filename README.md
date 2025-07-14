@@ -67,24 +67,24 @@ import matplotlib.pyplot as plt
 
 labels = [ "1", r"$\delta$", r"$\delta^2$", r"$s^2$", r"$\nabla^2\delta$", r"$\delta^3$", ]
 n = 5
-fig, axes = plt.subplots(n, n, dpi=120, figsize=(12, 10.5), sharex=True, )
-ipk = -1
+fig, axes = plt.subplots(n, n, dpi=120, figsize=(11, 9), sharex=True, sharey='row')
 for j in range(n+1):
     for i in range(n+1):
-        if i==n or j==n : ipk+=1; continue
+        if i==n or j==n : continue
         if i < j: axes[i,j].axis('off') ; continue
-        ipk += 1
         for iz in range(4):
-            axes[i,j].loglog( k, np.abs(Pk_ij[ipk, iz,]), c=f"C{iz}", label=f"z = {z[iz]}" )
-        vmin, vmax = np.abs(Pk_ij[ipk]).min(), np.abs(Pk_ij[ipk]).max()
+            axes[i,j].loglog( k, np.abs(Pk_ij[iz,i,j,]), c=f"C{iz}", label=f"z = {z[iz]}" )
+        
+        vmin, vmax = np.abs(Pk_ij[:,i,j,]).min(), np.abs(Pk_ij[:,i,j,]).max()
         axes[i,j].set_title( f'⟨{labels[i]},{labels[j]}⟩', fontsize=13)
-        axes[i,j].set_xlim( 0.5e-2, 1 )
-        axes[i,j].set_ylim( vmin*0.98+1e-4, vmax*1.2 )
+        axes[i,j].set_xlim( 0.5e-2, 0.99 )
+        axes[i,j].set_ylim( vmin*0.5+1e-4, vmax*2 )
 for i in range(n):
     axes[-1,i].set_xlabel(r"k [Mpc$^{-1}h$]", fontsize=12, )
     axes[i, 0].set_ylabel("P$_{ij}$(k)", fontsize=14, )
-axes[0,0].legend(fontsize=10)
-plt.tight_layout( h_pad=0.8, w_pad=0, )
+axes[0,0].legend(fontsize=13, frameon=False, bbox_to_anchor=(1.02, 1), loc='upper left')
+plt.tight_layout( h_pad=0.6, w_pad=0, )
+fig.subplots_adjust(hspace=0.21, wspace=0)
 plt.show()
 
 ```
@@ -96,8 +96,9 @@ Given a set of bias parameters, we can combine the basis spectra to biased trace
 alpha = 1.03         # shot noise amplitude
 bias = [ 0.32, -0.43, -0.14, -0.14, ]       # b_1, b_2, b_s, b_\nabla
 n_g = 0.5e-4      # number density of galaxies, unit : [h^3/Mpc^3]
-pk_hh, pk_hm = EFTofLSS_Model.CombinePkij( k, Pk_ij, *bias )
-pk_hh += alpha * 1./n_g
+IndexZ = 0        # redshift bin
+pk_auto, pk_cross = EFTofLSS_Model.biased_spectra( k, Pk_ij[IndexZ], bias[1:] )
+pk_auto += bias[0] *pk_shot
 
 # plt.loglog( k, pk_hh, label="$P_{hh}$" )
 # plt.loglog( k, pk_hm, label="$P_{hm}$" )
