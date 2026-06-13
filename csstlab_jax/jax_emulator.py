@@ -3,10 +3,11 @@ import numpy as np
 from .jax_base import BaseEmulator_GP
 from .jax_emu_simu import Emulator_simu
 from .jax_emu_loop import Emulator_loop
-from .jax_interpolate import RectBivariateSpline
+#from .jax_interpolate import RectBivariateSpline
 
 import jax
 from jax import numpy as jnp
+import interpax
 jax.config.update("jax_enable_x64", True)
 
 warnings.simplefilter('always', UserWarning)
@@ -218,8 +219,8 @@ class Emulator(BaseEmulator_GP):
         self.__has_set_k_and_z = True
         self.__set_k = k
         self.__set_z = jnp.atleast_1d( z[self.__intp_zsort] )
-        #self.__set_kz_points = jnp.array( jnp.meshgrid( self.__set_z, self.__set_k, indexing='ij', ) ).reshape(2, -1).T
-        #self.__set_kz_shape = ( self.__set_z.shape[0], self.__set_k.shape[0], )
+        self.__set_kz_points = jnp.array( jnp.meshgrid( self.__set_z, self.__set_k, indexing='ij', ) ).reshape(2, -1)
+        self.__set_kz_shape = ( self.__set_z.shape[0], self.__set_k.shape[0], )
         self.__to_k_mask(k, z) 
         self.__set_pkij = [None, ] *21
         ##self.__set_pkij = jnp.squeeze(self.__set_pkij)     ## shape as (21, Nk) if `z` is a scalar
@@ -277,6 +278,7 @@ class Emulator(BaseEmulator_GP):
         If k and z are set, return P_ij array, with shape (21, Nz, Nk), where 21 is the number of P_ij components.
         Otherwise, the (k, z) bins are the default setting in training the emulator.
         '''
+        Param = jax.device_put( jnp.asarray(Param, dtype=jnp.float64) )
         ParamNorm = self.NormalizeParam(Param)
         if jnp.any( jnp.abs(ParamNorm) > 1):
             warnings.warn("The input Cosmological parameters are out of the range of the emulator. ")
@@ -290,16 +292,10 @@ class Emulator(BaseEmulator_GP):
                 kdrop0, kdrop1 = self.__intp_kdrop[i][j]
                 data_pk = jnp.hstack([ pk_lin[:, i, j, :kdrop0], pk_D[:, i, j, kdrop1: ], ])
                 self.__set_pkij[l] = \
-                RectBivariateSpline(
-                    self.__z[::-1], self.__k_stack[i][j], data_pk[::-1],   ## `z` axis should be descending
-                    kx=3, ky=3,  
-                )(  self.__set_z, self.__set_k, grid=True,  )[self.__intp_zsort]
-                r'''
-                self.__set_pkij[l] = \
-                RegularGridInterpolator(
-                    (self.__z[::-1], self.__k_stack[i][j]), data_pk[::-1],   ## `z` axis should be descending
-                )(self.__set_kz_points).reshape(self.__set_kz_shape)[self.__intp_zsort]
-                '''
+                    interpax.interp2d( #self.__set_z, self.__set_k, 
+                                    self.__set_kz_points[0], self.__set_kz_points[1], 
+                                    self.__z[::-1], self.__k_stack[i][j], data_pk[::-1], 
+                                    method="cubic", ).reshape(self.__set_kz_shape)[self.__intp_zsort]
             return  jnp.squeeze(jnp.array(self.__set_pkij)) *self.__Mask_k
         else:
             pk_D = jnp.array([ pk_D[:, i, j] for (i, j) in self._index ])
@@ -307,11 +303,12 @@ class Emulator(BaseEmulator_GP):
     
 
     
+    
     ## -----------------------------------------------------------------------------
     ## differentiation methods
     ## -----------------------------------------------------------------------------
     
-    def Pk_ij( self, 
+    def pkij( self, 
             Omega_b = None, 
             Omega_m = None, 
             h = None, 
@@ -338,7 +335,7 @@ class Emulator(BaseEmulator_GP):
         pre_fun : bool, default is False
             If True, pre-compile the derivative functions.
         '''
-        self.__func_deri1 = [ jax.jacfwd(self.Pk_ij, argnums=(i) )
+        self.__func_deri1 = [ jax.jacfwd(self.pkij, argnums=(i) )
                         for i in range(8) ]
         self.__func_deri2 = [ [ None for j in range(8) ] for i in range(8) ]
         for i in range(8):
@@ -346,11 +343,11 @@ class Emulator(BaseEmulator_GP):
                 self.__func_deri2[i][j] = jax.jacfwd( self.__func_deri1[i], argnums=(j) )
         if pre_fun :
             p0 = 0.5*(self.ParamRange_LO + self.ParamRange_UP)
-            self.Pk_ij_Dparam(*p0, Iparam=0)
-            self.Pk_ij_DparamDparam(*p0, Iparam1=0, Iparam2=0, )
+            self.pkij_diff(*p0, dp=0)
+            self.pkij_diff2(*p0, dp1=0, dp2=0, )
         
 
-    def Pk_ij_Dparam(self, 
+    def pkij_diff(self, 
             Omega_b = None, 
             Omega_m = None, 
             h = None, 
@@ -359,7 +356,7 @@ class Emulator(BaseEmulator_GP):
             w_0 = None,
             w_a= None, 
             M_nu = None, 
-            Iparam : int = None, 
+            dp : int = None, 
         ):
         r'''
         Derivative of the power spectrum with respect to the cosmological parameters.
@@ -367,16 +364,16 @@ class Emulator(BaseEmulator_GP):
         ----------
         Omega_b, Omega_m, h, n_s, As1e9, w_0, w_a, M_nu : float
             The cosmological parameters.
-        Iparam : int
+        dp : int
             The index of the parameter to take the derivative with respect to.
         ----------
         '''
-        return self.__func_deri1[Iparam]( 
+        return self.__func_deri1[dp]( 
             Omega_b, Omega_m, h, n_s, As1e9, w_0, w_a, M_nu,
         )
     
 
-    def Pk_ij_DparamDparam(self, 
+    def pkij_diff2(self, 
             Omega_b = None, 
             Omega_m = None, 
             h = None, 
@@ -385,8 +382,8 @@ class Emulator(BaseEmulator_GP):
             w_0 = None,
             w_a= None, 
             M_nu = None, 
-            Iparam1 : int = None, 
-            Iparam2 : int = None, 
+            dp1 : int = None, 
+            dp2 : int = None, 
         ):
         r'''
         Second order derivative of the power spectrum with respect to the cosmological parameters.
@@ -394,19 +391,19 @@ class Emulator(BaseEmulator_GP):
         ----------
         Omega_b, Omega_m, h, n_s, As1e9, w_0, w_a, M_nu : float
             The cosmological parameters.
-        Iparam1, Iparam2 : int
+        dp1, dp2 : int
             The indices of the parameters to take the second derivative with respect to.
         ----------
         '''
-        if Iparam1 > Iparam2 :
-            Iparam1, Iparam2 = Iparam2, Iparam1
-        return self.__func_deri2[Iparam1][Iparam2]( 
+        if dp1 > dp2 :
+            dp1, dp2 = dp2, dp1
+        return self.__func_deri2[dp1][dp2]( 
             Omega_b, Omega_m, h, n_s, As1e9, w_0, w_a, M_nu,
         )
     
     
     
-    def Pk_ij_FiniteDiff_Dparam(self, 
+    def pkij_finiteDiff(self, 
             Omega_b = None, 
             Omega_m = None, 
             h = None, 
@@ -415,29 +412,29 @@ class Emulator(BaseEmulator_GP):
             w_0 = None,
             w_a= None, 
             M_nu = None, 
-            Iparam : int = None, 
+            dp : int = None, 
             eps = 0.05, 
         ):
         r'''
-        Finite difference implementation for method `self.Pk_ij_Dparam`
+        Finite difference implementation for method `self.pkij_diff`
         only for check
         '''
         Param = jnp.array([
             Omega_b, Omega_m, h, n_s, As1e9, w_0, w_a, M_nu,
         ])
-        Param_i1 = Param.at[Iparam].multiply(1 + eps)
-        Param_i2 = Param.at[Iparam].multiply(1 + 2*eps)
-        Param_j1 = Param.at[Iparam].multiply(1 - eps)
-        Param_j2 = Param.at[Iparam].multiply(1 - 2*eps)
+        Param_i1 = Param.at[dp].multiply(1 + eps)
+        Param_i2 = Param.at[dp].multiply(1 + 2*eps)
+        Param_j1 = Param.at[dp].multiply(1 - eps)
+        Param_j2 = Param.at[dp].multiply(1 - 2*eps)
         pk_i1 = self.__call__( Param_i1, )
         pk_i2 = self.__call__( Param_i2, )
         pk_j1 = self.__call__( Param_j1, )
         pk_j2 = self.__call__( Param_j2, )
-        pk_deri = ( -pk_i2 + 8*pk_i1 - 8*pk_j1 + pk_j2 ) / (12*eps*Param[Iparam])
+        pk_deri = ( -pk_i2 + 8*pk_i1 - 8*pk_j1 + pk_j2 ) / (12*eps*Param[dp])
         return pk_deri 
     
 
-    def Pk_ij_FiniteDiff_DparamDparam(self, 
+    def pkij_finiteDiff2(self, 
             Omega_b = None, 
             Omega_m = None, 
             h = None, 
@@ -446,42 +443,42 @@ class Emulator(BaseEmulator_GP):
             w_0 = None,
             w_a= None, 
             M_nu = None, 
-            Iparam1 : int = None, 
-            Iparam2 : int = None, 
+            dp1 : int = None, 
+            dp2 : int = None, 
             eps = 0.05, 
         ):
         r'''
-        Finite difference implementation for method `self.Pk_ij_DparamDparam`
+        Finite difference implementation for method `self.pkij_diff2`
         only for check
         '''
         Param = jnp.array([
             Omega_b, Omega_m, h, n_s, As1e9, w_0, w_a, M_nu,
         ])
-        if Iparam2 is None or Iparam1==Iparam2 :
+        if dp2 is None or dp1==dp2 :
             ## 4-th order accurate
-            Param_i1 = Param.at[Iparam1].multiply(1 + eps)
-            Param_i2 = Param.at[Iparam1].multiply(1 + 2*eps)
-            Param_j1 = Param.at[Iparam1].multiply(1 - eps)
-            Param_j2 = Param.at[Iparam1].multiply(1 - 2*eps)
+            Param_i1 = Param.at[dp1].multiply(1 + eps)
+            Param_i2 = Param.at[dp1].multiply(1 + 2*eps)
+            Param_j1 = Param.at[dp1].multiply(1 - eps)
+            Param_j2 = Param.at[dp1].multiply(1 - 2*eps)
             pk_i1 = self.__call__( Param_i1, )
             pk_i2 = self.__call__( Param_i2, )
             pk_j1 = self.__call__( Param_j1, )
             pk_j2 = self.__call__( Param_j2, )
             pk_i0 = self.__call__( Param, )
-            pk_deri = ( -pk_i2 + 16*pk_i1 - 30*pk_i0 + 16*pk_j1 - pk_j2 ) / (12*eps*eps*Param[Iparam1]*Param[Iparam1])
+            pk_deri = ( -pk_i2 + 16*pk_i1 - 30*pk_i0 + 16*pk_j1 - pk_j2 ) / (12*eps*eps*Param[dp1]*Param[dp1])
         else:
-            if Iparam1 > Iparam2 :
-                Iparam1, Iparam2 = Iparam2, Iparam1
+            if dp1 > dp2 :
+                dp1, dp2 = dp2, dp1
             ## second order accurate ; formula with 4-th accuracy is too long ... ... 
-            Param_i1 = Param.at[Iparam1].multiply(1 + eps).at[Iparam2].multiply(1 + eps)
-            Param_i2 = Param.at[Iparam1].multiply(1 + eps).at[Iparam2].multiply(1 - eps)
-            Param_j1 = Param.at[Iparam1].multiply(1 - eps).at[Iparam2].multiply(1 + eps)
-            Param_j2 = Param.at[Iparam1].multiply(1 - eps).at[Iparam2].multiply(1 - eps)
+            Param_i1 = Param.at[dp1].multiply(1 + eps).at[dp2].multiply(1 + eps)
+            Param_i2 = Param.at[dp1].multiply(1 + eps).at[dp2].multiply(1 - eps)
+            Param_j1 = Param.at[dp1].multiply(1 - eps).at[dp2].multiply(1 + eps)
+            Param_j2 = Param.at[dp1].multiply(1 - eps).at[dp2].multiply(1 - eps)
             pk_i1 = self.__call__( Param_i1, )
             pk_i2 = self.__call__( Param_i2, )
             pk_j1 = self.__call__( Param_j1, )
             pk_j2 = self.__call__( Param_j2, )
-            pk_deri = ( pk_i1 - pk_i2 - pk_j1 + pk_j2 ) / (4*eps*eps*Param[Iparam1]*Param[Iparam2])
+            pk_deri = ( pk_i1 - pk_i2 - pk_j1 + pk_j2 ) / (4*eps*eps*Param[dp1]*Param[dp2])
         return pk_deri
     
     
